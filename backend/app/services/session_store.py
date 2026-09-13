@@ -4,8 +4,13 @@ import uuid
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 
+import logging
+
 from app.schemas.domain import AnalysisResult, AnalysisStatus, TraceStep, TraceStatus
 from app.schemas.region_interpretation import BiTemporalRegionInterpretationResult
+from app.storage.database import db_storage
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -35,10 +40,14 @@ class QuerySession:
     trace: list[TraceStep] = field(default_factory=list)
     result: AnalysisResult | None = None
     created_at: datetime = field(default_factory=lambda: datetime.now(UTC))
+    query: str = ""
+    intent: str | None = None
+    mode: str | None = None
+    metadata: dict[str, Any] = field(default_factory=dict)
 
 
 class SessionStore:
-    """In-memory session store for Phase 1. No database."""
+    """Session store with in-memory caching and SQLite persistence."""
 
     def __init__(self) -> None:
         self._sessions: dict[str, QuerySession] = {}
@@ -85,26 +94,121 @@ class SessionStore:
     ) -> BiTemporalRegionInterpretationResult | None:
         return self._interpretations.get(self._conversation_key(session_id, region_id))
 
-    def create(self) -> str:
+    def create(self, *args: Any, query: str = "", mode: str = "", intent: str | None = None, **kwargs: Any) -> str:
         session_id = str(uuid.uuid4())
         self._sessions[session_id] = QuerySession(
             session_id=session_id,
             status=AnalysisStatus.PENDING,
+            query=query,
+            mode=mode,
+            intent=intent,
         )
         return session_id
 
     def get(self, session_id: str) -> QuerySession | None:
-        return self._sessions.get(session_id)
+        session = self._sessions.get(session_id)
+        if session is not None:
+            return session
+
+        # Attempt to reload from SQLite persistence
+        try:
+            row = db_storage.get_session(session_id)
+            if row:
+                status_enum = AnalysisStatus.COMPLETED
+                try:
+                    status_enum = AnalysisStatus(row["status"])
+                except Exception:
+                    pass
+
+                result_obj = None
+                trace_list: list[TraceStep] = []
+                if row["result_json"]:
+                    try:
+                        result_obj = AnalysisResult.model_validate_json(row["result_json"])
+                        trace_list = result_obj.trace
+                    except Exception as exc:
+                        logger.warning("Failed to deserialize result_json for %s: %s", session_id, exc)
+
+                created_dt = datetime.now(UTC)
+                if row["created_at"]:
+                    try:
+                        created_dt = datetime.fromisoformat(row["created_at"])
+                    except Exception:
+                        pass
+
+                reconstructed = QuerySession(
+                    session_id=row["session_id"],
+                    status=status_enum,
+                    trace=trace_list,
+                    result=result_obj,
+                    created_at=created_dt,
+                    query=row["query"] or "",
+                    intent=row["intent"] or None,
+                    mode=row["mode"] or None,
+                )
+                self._sessions[session_id] = reconstructed
+                return reconstructed
+        except Exception as exc:
+            logger.warning("Error reloading session %s from SQLite: %s", session_id, exc)
+
+        return None
 
     def update_trace(self, session_id: str, trace: list[TraceStep]) -> None:
         session = self._require(session_id)
         session.trace = trace
 
-    def complete(self, session_id: str, result: AnalysisResult) -> None:
+    def complete(
+        self,
+        session_id: str,
+        result: AnalysisResult,
+        *,
+        query: str | None = None,
+        intent: str | None = None,
+        mode: str | None = None,
+        metadata: dict[str, Any] | None = None,
+    ) -> None:
         session = self._require(session_id)
         session.status = result.status
         session.result = result
         session.trace = result.trace
+        if query:
+            session.query = query
+        if intent:
+            session.intent = intent
+        if mode:
+            session.mode = mode
+
+        # Persist to SQLite
+        try:
+            db_storage.save_session(
+                session_id=session_id,
+                created_at=session.created_at,
+                query=session.query or query or "",
+                intent=session.intent or intent or None,
+                mode=session.mode
+                or mode
+                or (result.mode.value if hasattr(result.mode, "value") else str(result.mode)),
+                status=result.status,
+                summary_answer=result.answer,
+                result=result,
+                trace=result.trace,
+                metadata=metadata,
+            )
+        except Exception as exc:
+            logger.warning("Failed to persist completed session %s: %s", session_id, exc)
+
+    def list_history(
+        self,
+        *,
+        limit: int = 50,
+        offset: int = 0,
+        mode: str | None = None,
+        status: str | None = None,
+    ) -> tuple[list[dict[str, Any]], int]:
+        """Returns (items, total_count) from persistent storage."""
+        items = db_storage.list_sessions(limit=limit, offset=offset, mode=mode, status=status)
+        total = db_storage.count_sessions(mode=mode, status=status)
+        return items, total
 
     def _require(self, session_id: str) -> QuerySession:
         session = self.get(session_id)

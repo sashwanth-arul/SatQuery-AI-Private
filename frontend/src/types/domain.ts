@@ -483,6 +483,26 @@ export interface SubmitQueryData {
   result: AnalysisResult;
 }
 
+export interface AnalysisHistoryItem {
+  session_id: string;
+  created_at: string;
+  query: string;
+  intent?: string | null;
+  mode?: string | null;
+  status: string;
+  summary_answer?: string | null;
+  confidence?: number | null;
+  metrics_summary?: Record<string, unknown> | null;
+  input_summary?: Record<string, unknown> | null;
+}
+
+export interface AnalysisHistoryResponse {
+  items: AnalysisHistoryItem[];
+  total: number;
+  limit: number;
+  offset: number;
+}
+
 export interface ErrorResponse {
   success: false;
   error: { code: string; message: string; user_message?: string | null; field?: string | null };

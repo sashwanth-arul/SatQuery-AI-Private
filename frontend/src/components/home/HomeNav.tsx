@@ -5,7 +5,9 @@ import { usePathname } from "next/navigation";
 import { useCallback, useEffect, useId, useRef, useState } from "react";
 import {
   BookOpen,
+  FileText,
   Heart,
+  History,
   Home,
   Map as MapIcon,
   Menu,
@@ -14,6 +16,8 @@ import {
 const NAV_ITEMS = [
   { href: "/", label: "Home", Icon: Home, testId: "site-nav-link-home" },
   { href: "/workstation", label: "Workstation", Icon: MapIcon, testId: "site-nav-link-workstation" },
+  { href: "/history", label: "Analysis History", Icon: History, testId: "site-nav-link-history" },
+  { href: "/reports", label: "Reports", Icon: FileText, testId: "site-nav-link-reports" },
   { href: "/tutorial", label: "Tutorial", Icon: BookOpen, testId: "site-nav-link-tutorial" },
   { href: "/credits", label: "Credits", Icon: Heart, testId: "site-nav-link-credits" },
 ] as const;

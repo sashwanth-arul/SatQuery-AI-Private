@@ -1,4 +1,5 @@
 import type {
+  AnalysisHistoryResponse,
   AnalysisResult,
   ApiResponse,
   GroundContextResult,
@@ -149,6 +150,37 @@ export const api = {
 
   exportRegionEvidenceUrl: (sessionId: string, regionId: string) =>
     `${API_BASE}/api/v1/query/${sessionId}/regions/${encodeURIComponent(regionId)}/evidence`,
+
+  downloadReportUrl: (sessionId: string) =>
+    `${API_BASE}/api/v1/query/${sessionId}/report`,
+
+  downloadReport: (sessionId: string) => {
+    const url = `${API_BASE}/api/v1/query/${sessionId}/report`;
+    if (typeof window !== "undefined") {
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `satquery-report-${sessionId.slice(0, 8)}.html`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+    }
+  },
+
+  getHistory: (params?: { limit?: number; offset?: number; mode?: string; status?: string }) => {
+    const q = new URLSearchParams();
+    if (params?.limit != null) q.set("limit", String(params.limit));
+    if (params?.offset != null) q.set("offset", String(params.offset));
+    if (params?.mode) q.set("mode", params.mode);
+    if (params?.status) q.set("status", params.status);
+    const qs = q.toString();
+    return request<AnalysisHistoryResponse>(`/api/v1/query/history${qs ? `?${qs}` : ""}`);
+  },
+
+  getHistoryResult: (sessionId: string) =>
+    request<AnalysisResult>(`/api/v1/query/${sessionId}/result`),
+
+  getHistoryTrace: (sessionId: string) =>
+    request<TraceStep[]>(`/api/v1/query/${sessionId}/trace`),
 
   fetchImageryPreview: async (imageId: string, bbox: string, maxSize = 512): Promise<string> => {
     const params = new URLSearchParams({ bbox, max_size: String(maxSize) });

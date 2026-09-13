@@ -1,8 +1,10 @@
 from fastapi import APIRouter
 from fastapi.responses import Response
 
+from app.core.errors import SatQueryError
 from app.core.responses import ApiResponse, SubmitQueryData, success
 from app.schemas.domain import AnalysisResult, QueryRequest, TraceStep
+from app.schemas.history import AnalysisHistoryItem, AnalysisHistoryResponse
 from app.schemas.region_chat import RegionChatData, RegionChatRequest, SessionChatRequest
 from app.services.session_chat import session_chat_service
 from app.schemas.ground_context import GroundContextResult
@@ -14,14 +16,58 @@ from app.services.region_chat import region_chat_service
 from app.services.region_evidence_export import region_evidence_export_service
 from app.services.region_interpretation import region_interpretation_service
 from app.services.region_ranking import region_ranking_service
+from app.services.report_service import report_service
+from app.services.session_store import session_store
 
 router = APIRouter(prefix="/query", tags=["query"])
+
+
+@router.get("/history", response_model=ApiResponse[AnalysisHistoryResponse])
+async def get_history(
+    limit: int = 50,
+    offset: int = 0,
+    mode: str | None = None,
+    status: str | None = None,
+) -> ApiResponse[AnalysisHistoryResponse]:
+    items_raw, total = session_store.list_history(
+        limit=limit,
+        offset=offset,
+        mode=mode,
+        status=status,
+    )
+    items = [AnalysisHistoryItem.model_validate(item) for item in items_raw]
+    return success(
+        AnalysisHistoryResponse(
+            items=items,
+            total=total,
+            limit=limit,
+            offset=offset,
+        )
+    )
 
 
 @router.post("/submit", response_model=ApiResponse[SubmitQueryData])
 async def submit_query(request: QueryRequest) -> ApiResponse[SubmitQueryData]:
     result = await query_controller.submit(request)
     return success(SubmitQueryData(session_id=result.session_id, result=result))
+
+
+@router.get("/{session_id}/report")
+async def get_analysis_report(session_id: str) -> Response:
+    session = session_store.get(session_id)
+    if not session or not session.result:
+        raise SatQueryError(
+            "session_not_found",
+            f"No result found for session: {session_id}",
+            status_code=404,
+        )
+    html_content = report_service.generate_html_report(session.result)
+    filename = f"satquery-report-{session_id[:8]}.html"
+    return Response(
+        content=html_content,
+        media_type="text/html",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
 
 
 @router.get("/{session_id}/trace", response_model=ApiResponse[list[TraceStep]])

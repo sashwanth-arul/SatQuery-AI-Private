@@ -1,8 +1,9 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { ArrowRight, ChevronRight, UploadCloud } from "lucide-react";
+import { ArrowRight, ChevronRight, Mic, UploadCloud } from "lucide-react";
 import type { ImageInput } from "@/types/domain";
+import { useSpeechToText } from "@/lib/useSpeechToText";
 
 export type ComposerInputMode = "catalog" | "upload" | "temporal_pair" | "cross_modal";
 
@@ -88,6 +89,17 @@ export function QueryComposer({
   const opticalFileRef = useRef<HTMLInputElement>(null);
   const sarFileRef = useRef<HTMLInputElement>(null);
 
+  const {
+    isListening,
+    error: speechError,
+    isSupported: speechSupported,
+    toggleListening,
+  } = useSpeechToText({
+    onTranscript: (transcript) => {
+      onQueryChange(transcript);
+    },
+  });
+
   useEffect(() => {
     if (inspectorOpen) {
       setComposerExpanded(false);
@@ -164,6 +176,22 @@ export function QueryComposer({
             autoComplete="off"
             required
           />
+          {speechSupported ? (
+            <button
+              type="button"
+              data-testid="composer-mic-btn"
+              className={`composer-voice-btn mx-1 flex h-8 w-8 items-center justify-center rounded-full transition-all ${
+                isListening
+                  ? "text-rose-500 bg-rose-500/20 ring-2 ring-rose-500/50 animate-pulse"
+                  : "text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-white/5"
+              }`}
+              onClick={toggleListening}
+              aria-label={isListening ? "Listening... click to stop" : "Voice input (Speech to Text)"}
+              title={isListening ? "Listening... speak now" : "Voice prompt (Speech to Text)"}
+            >
+              <Mic size={17} className={isListening ? "animate-pulse text-rose-500" : ""} />
+            </button>
+          ) : null}
           <button
             type="submit"
             data-testid="composer-run"
@@ -180,6 +208,11 @@ export function QueryComposer({
             )}
           </button>
         </form>
+        {speechError ? (
+          <p className="px-2 pt-1 text-xs text-rose-400" role="alert">
+            {speechError}
+          </p>
+        ) : null}
 
         <div className="composer-mode-row" data-tour="composer-mode-row">
           <button

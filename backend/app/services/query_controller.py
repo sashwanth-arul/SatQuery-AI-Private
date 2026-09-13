@@ -115,6 +115,19 @@ class QueryController:
         self._water_tool = WaterChangeTool()
         self._vegetation_tool = VegetationChangeTool()
 
+    def _create_session(self, query: str = "", mode: str = "") -> str:
+        try:
+            session_id = self._store.create(query=query, mode=mode)
+        except TypeError:
+            session_id = self._store.create()
+        session = self._store.get(session_id)
+        if session is not None:
+            if query and not session.query:
+                session.query = query
+            if mode and not session.mode:
+                session.mode = mode
+        return session_id
+
     async def submit(self, request: QueryRequest) -> AnalysisResult:
         if request.is_cross_modal_upload:
             return await self._submit_cross_modal_optical_sar(request)
@@ -125,7 +138,7 @@ class QueryController:
         return await self._submit_temporal_analysis(request)
 
     async def _submit_cross_modal_optical_sar(self, request: QueryRequest) -> AnalysisResult:
-        session_id = self._store.create()
+        session_id = self._create_session(query=request.query, mode="cross_modal")
         trace: list[TraceStep] = []
         optical_id = request.optical_image_id
         sar_id = request.sar_image_id
@@ -241,7 +254,7 @@ class QueryController:
             raise SatQueryError("analysis_failed", str(exc), status_code=500) from exc
 
     async def _submit_bi_temporal_change(self, request: QueryRequest) -> AnalysisResult:
-        session_id = self._store.create()
+        session_id = self._create_session(query=request.query, mode="temporal_pair")
         trace: list[TraceStep] = []
         earlier_id = request.earlier_image_id
         later_id = request.later_image_id
@@ -389,7 +402,7 @@ class QueryController:
             raise SatQueryError("analysis_failed", str(exc), status_code=500) from exc
 
     async def _submit_single_image(self, request: QueryRequest) -> AnalysisResult:
-        session_id = self._store.create()
+        session_id = self._create_session(query=request.query, mode="upload")
         trace: list[TraceStep] = []
         image_id = request.image_id
         if not image_id:
@@ -495,7 +508,7 @@ class QueryController:
             raise SatQueryError("analysis_failed", str(exc), status_code=500) from exc
 
     async def _submit_temporal_analysis(self, request: QueryRequest) -> AnalysisResult:
-        session_id = self._store.create()
+        session_id = self._create_session(query=request.query, mode="catalog")
         trace: list[TraceStep] = []
         plan_output = await self._run_plan_step(trace, request)
         plan = plan_output.plan
