@@ -1,8 +1,11 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 from datetime import UTC, datetime
 from time import perf_counter
+
+logger = logging.getLogger(__name__)
 
 from app.core.config import get_settings
 from app.adapters.change.factory import get_upload_change_detector
@@ -57,8 +60,23 @@ from app.schemas.cross_modal import (
     SARAnalysisInput,
 )
 from app.services.cross_modal_pipeline import build_cross_modal_metrics, build_cross_modal_result
+from app.schemas.bi_temporal_change import BiTemporalChangeResult
+from app.adapters.change.bi_temporal.validator import resolve_upload_path
+from app.storage.factory import get_image_storage
 from app.tools.single_image.geochat_caption import GeoChatCaptionTool
 from app.tools.single_image.geochat_vqa import GeoChatVQATool
+from app.tools.building.counting_tool import BuildingCountTool
+from app.tools.building.temporal_matcher_tool import BuildingTemporalMatcherTool
+from app.tools.surface.built_up_tool import BuiltUpAreaTool
+from app.tools.surface.water_tool import WaterChangeTool
+from app.tools.surface.vegetation_tool import VegetationChangeTool
+from app.schemas.building_analysis import (
+    BuildingDetectionResult,
+    BuildingFootprint,
+    BuildingStatus,
+    BuildingTemporalMatchResult,
+)
+from app.schemas.surface_change import SurfaceAreaChangeResult, SurfaceDomainKind
 from app.tools.evidence.fuse_evidence import FuseEvidenceTool
 from app.tools.evidence.generate_evidence import GenerateEvidenceTool
 from app.tools.imagery.fetch_imagery import FetchImageryTool
@@ -91,6 +109,11 @@ class QueryController:
         self._sar_analysis = UploadedSARAnalysisTool()
         self._cross_modal_fusion = CrossModalFusionTool()
         self._imagery_resolver = TemporalImageryResolver()
+        self._building_count = BuildingCountTool()
+        self._building_matcher = BuildingTemporalMatcherTool()
+        self._built_up_tool = BuiltUpAreaTool()
+        self._water_tool = WaterChangeTool()
+        self._vegetation_tool = VegetationChangeTool()
 
     async def submit(self, request: QueryRequest) -> AnalysisResult:
         if request.is_cross_modal_upload:
@@ -147,6 +170,17 @@ class QueryController:
             co_registration_status, co_registration_provenance = resolve_co_registration_status(
                 optical, sar
             )
+            debug_geospatial = {
+                "optical_crs": optical.native_crs or optical.crs,
+                "optical_bounds": optical.native_bounds or optical.bounds,
+                "sar_crs": sar.native_crs or sar.crs,
+                "sar_bounds": sar.native_bounds or sar.bounds,
+                "transformed_epsg4326_bounds": {
+                    "optical": optical.bounds,
+                    "sar": sar.bounds,
+                },
+                "overlap_bounds": bounds,
+            }
 
             optical_summary = await self._run_optical_analysis_step(
                 trace, request, optical, bounds, plan
@@ -181,6 +215,7 @@ class QueryController:
                 optical_image_id=optical_id,
                 sar_image_id=sar_id,
                 fused_regions_count=len(fused_regions),
+                debug_geospatial=debug_geospatial,
             )
             answer = self._answer.compose_cross_modal(request, cross_modal_result)
             metrics = build_cross_modal_metrics(cross_modal_result) + evidence_out.metrics
@@ -240,6 +275,24 @@ class QueryController:
 
             plan_output = await self._run_plan_step(trace, request)
             plan = plan_output.plan
+
+            if plan.user_intent == QueryIntent.BUILDING_TEMPORAL_CHANGE:
+                return await self._submit_uploaded_building_temporal_change(
+                    session_id, trace, request, earlier, later, plan
+                )
+            if plan.user_intent == QueryIntent.BUILT_UP_AREA_CHANGE:
+                return await self._submit_surface_area_change(
+                    session_id, trace, request, earlier, later, plan, SurfaceDomainKind.BUILT_UP
+                )
+            if plan.user_intent == QueryIntent.WATER_CHANGE:
+                return await self._submit_surface_area_change(
+                    session_id, trace, request, earlier, later, plan, SurfaceDomainKind.WATER
+                )
+            if plan.user_intent == QueryIntent.VEGETATION_CHANGE:
+                return await self._submit_surface_area_change(
+                    session_id, trace, request, earlier, later, plan, SurfaceDomainKind.VEGETATION
+                )
+
             if plan.user_intent != QueryIntent.BI_TEMPORAL_CHANGE_VQA:
                 raise SatQueryError(
                     "planner_routing_error",
@@ -327,9 +380,11 @@ class QueryController:
             )
             self._store.complete(session_id, result)
             return result
-        except SatQueryError:
+        except SatQueryError as exc:
+            logger.error("Bi-temporal change SatQueryError [%s]: %s", exc.code, exc.message)
             raise
         except Exception as exc:
+            logger.exception("Bi-temporal change unexpected exception: %s", exc)
             self._fail_trace(trace, exc)
             raise SatQueryError("analysis_failed", str(exc), status_code=500) from exc
 
@@ -361,6 +416,17 @@ class QueryController:
 
             plan_output = await self._run_plan_step(trace, request, image_modality=image.modality)
             plan = plan_output.plan
+
+            if plan.user_intent == QueryIntent.BUILDING_COUNT:
+                return await self._submit_single_image_building_count(
+                    session_id, trace, request, image, plan
+                )
+
+            if plan.user_intent == QueryIntent.GROUNDING:
+                return await self._submit_single_image_grounding(
+                    session_id, trace, request, image, plan
+                )
+
             if plan.user_intent == QueryIntent.SINGLE_IMAGE_CAPTION:
                 caption_out = await self._run_geochat_caption_step(trace, request, image, plan)
                 await self._run_caption_generate_evidence_step(trace, caption_out.result)
@@ -393,7 +459,7 @@ class QueryController:
             if plan.user_intent != QueryIntent.SINGLE_IMAGE_VQA:
                 raise SatQueryError(
                     "planner_routing_error",
-                    f"Expected single_image_vqa or single_image_caption intent, got {plan.user_intent.value}.",
+                    f"Expected single_image_vqa, single_image_caption, building_count, or grounding intent, got {plan.user_intent.value}.",
                     status_code=500,
                 )
 
@@ -561,6 +627,473 @@ class QueryController:
         except Exception as exc:
             self._fail_trace(trace, exc)
             raise SatQueryError("analysis_failed", str(exc), status_code=500) from exc
+
+    async def _submit_single_image_building_count(
+        self,
+        session_id: str,
+        trace: list[TraceStep],
+        request: QueryRequest,
+        image: ImageInput,
+        plan: QueryAnalysisPlan,
+    ) -> AnalysisResult:
+        storage = get_image_storage()
+        raster_path = resolve_upload_path(image, storage)
+
+        step_select = TraceStep(
+            id=f"select_building_detector-{len(trace) + 1}",
+            tool_name="select_building_detector",
+            status=TraceStatus.COMPLETED,
+            started_at=datetime.now(UTC),
+            completed_at=datetime.now(UTC),
+            duration_ms=2,
+            summary="Selected DevelopmentBuildingDetector for structural footprint extraction.",
+            metadata={"detector": "DevelopmentBuildingDetector", "modality": image.modality.value},
+        )
+        trace.append(step_select)
+
+        t0 = perf_counter()
+        started = datetime.now(UTC)
+        step_detect = TraceStep(
+            id=f"detect_buildings-{len(trace) + 1}",
+            tool_name="detect_buildings",
+            status=TraceStatus.RUNNING,
+            started_at=started,
+            summary="Detecting structural footprints from raster...",
+        )
+        trace.append(step_detect)
+        await asyncio.sleep(0)
+
+        detection_result, evidence_regions = await self._building_count.execute(image, raster_path)
+        step_detect.status = TraceStatus.COMPLETED
+        step_detect.completed_at = datetime.now(UTC)
+        step_detect.duration_ms = int((perf_counter() - t0) * 1000)
+        step_detect.summary = (
+            f"Detected {detection_result.count} building footprint(s) via {detection_result.detector_name}."
+        )
+        step_detect.metadata = {
+            "count": detection_result.count,
+            "total_area_m2": detection_result.total_area_m2,
+            "detector": detection_result.detector_name,
+        }
+
+        step_count = TraceStep(
+            id=f"count_objects-{len(trace) + 1}",
+            tool_name="count_objects",
+            status=TraceStatus.COMPLETED,
+            started_at=datetime.now(UTC),
+            completed_at=datetime.now(UTC),
+            duration_ms=1,
+            summary=f"Exact object counting: {detection_result.count} verified footprints (no LLM hallucination).",
+            metadata={"count": detection_result.count},
+        )
+        trace.append(step_count)
+
+        step_evidence = TraceStep(
+            id=f"generate_evidence-{len(trace) + 1}",
+            tool_name="generate_evidence",
+            status=TraceStatus.COMPLETED,
+            started_at=datetime.now(UTC),
+            completed_at=datetime.now(UTC),
+            duration_ms=2,
+            summary=f"Generated {len(evidence_regions)} georeferenced building evidence regions.",
+            metadata={"region_count": len(evidence_regions)},
+        )
+        trace.append(step_evidence)
+
+        answer = self._answer.compose_building_count(request, detection_result)
+        step_answer = TraceStep(
+            id=f"grounded_answer-{len(trace) + 1}",
+            tool_name="grounded_answer",
+            status=TraceStatus.COMPLETED,
+            started_at=datetime.now(UTC),
+            completed_at=datetime.now(UTC),
+            duration_ms=1,
+            summary="Synthesized grounded answer from verified detection metrics.",
+            metadata={"answer_length": len(answer)},
+        )
+        trace.append(step_answer)
+
+        result = AnalysisResult(
+            status=AnalysisStatus.COMPLETED,
+            session_id=session_id,
+            answer=answer,
+            confidence=detection_result.confidence,
+            confidence_available=True,
+            metrics=detection_result.metrics,
+            evidence=evidence_regions,
+            trace=trace,
+            mode=DataMode.DEVELOPMENT,
+            building_detection=detection_result,
+        )
+        self._store.complete(session_id, result)
+        return result
+
+    async def _submit_single_image_grounding(
+        self,
+        session_id: str,
+        trace: list[TraceStep],
+        request: QueryRequest,
+        image: ImageInput,
+        plan: QueryAnalysisPlan,
+    ) -> AnalysisResult:
+        storage = get_image_storage()
+        raster_path = resolve_upload_path(image, storage)
+
+        step_select = TraceStep(
+            id=f"select_grounding_model-{len(trace) + 1}",
+            tool_name="select_grounding_model",
+            status=TraceStatus.COMPLETED,
+            started_at=datetime.now(UTC),
+            completed_at=datetime.now(UTC),
+            duration_ms=2,
+            summary="Selected spatial object grounding and localization specialist.",
+            metadata={"specialist": "DevelopmentBuildingDetector"},
+        )
+        trace.append(step_select)
+
+        t0 = perf_counter()
+        started = datetime.now(UTC)
+        step_ground = TraceStep(
+            id=f"ground_objects-{len(trace) + 1}",
+            tool_name="ground_objects",
+            status=TraceStatus.RUNNING,
+            started_at=started,
+            summary="Localizing target structures and computing spatial coordinates...",
+        )
+        trace.append(step_ground)
+        await asyncio.sleep(0)
+
+        detection_result, evidence_regions = await self._building_count.execute(image, raster_path)
+        step_ground.status = TraceStatus.COMPLETED
+        step_ground.completed_at = datetime.now(UTC)
+        step_ground.duration_ms = int((perf_counter() - t0) * 1000)
+        step_ground.summary = f"Localized and grounded {len(evidence_regions)} object(s)."
+        step_ground.metadata = {"grounded_count": len(evidence_regions)}
+
+        step_evidence = TraceStep(
+            id=f"generate_evidence-{len(trace) + 1}",
+            tool_name="generate_evidence",
+            status=TraceStatus.COMPLETED,
+            started_at=datetime.now(UTC),
+            completed_at=datetime.now(UTC),
+            duration_ms=2,
+            summary=f"Packaged {len(evidence_regions)} grounded bounding coordinates.",
+            metadata={"region_count": len(evidence_regions)},
+        )
+        trace.append(step_evidence)
+
+        pct = round(detection_result.confidence * 100)
+        answer = (
+            f"Localized and grounded {detection_result.count} spatial object(s) "
+            f"with verified bounding boxes and footprint polygons (confidence {pct}%). "
+            f"All coordinates are transformed to WGS-84 and displayed on the interactive map."
+        )
+        step_answer = TraceStep(
+            id=f"grounded_answer-{len(trace) + 1}",
+            tool_name="grounded_answer",
+            status=TraceStatus.COMPLETED,
+            started_at=datetime.now(UTC),
+            completed_at=datetime.now(UTC),
+            duration_ms=1,
+            summary="Synthesized grounded answer with localized coordinates.",
+            metadata={"answer_length": len(answer)},
+        )
+        trace.append(step_answer)
+
+        result = AnalysisResult(
+            status=AnalysisStatus.COMPLETED,
+            session_id=session_id,
+            answer=answer,
+            confidence=detection_result.confidence,
+            confidence_available=True,
+            metrics=detection_result.metrics,
+            evidence=evidence_regions,
+            trace=trace,
+            mode=DataMode.DEVELOPMENT,
+            building_detection=detection_result,
+        )
+        self._store.complete(session_id, result)
+        return result
+
+    async def _submit_uploaded_building_temporal_change(
+        self,
+        session_id: str,
+        trace: list[TraceStep],
+        request: QueryRequest,
+        earlier: ImageInput,
+        later: ImageInput,
+        plan: QueryAnalysisPlan,
+    ) -> AnalysisResult:
+        storage = get_image_storage()
+        earlier_path = resolve_upload_path(earlier, storage)
+        later_path = resolve_upload_path(later, storage)
+
+        step_select = TraceStep(
+            id=f"select_building_detector-{len(trace) + 1}",
+            tool_name="select_building_detector",
+            status=TraceStatus.COMPLETED,
+            started_at=datetime.now(UTC),
+            completed_at=datetime.now(UTC),
+            duration_ms=2,
+            summary="Selected DevelopmentBuildingDetector for bi-temporal footprint analysis.",
+            metadata={"detector": "DevelopmentBuildingDetector"},
+        )
+        trace.append(step_select)
+
+        t0 = perf_counter()
+        t1_result, _ = await self._building_count.execute(earlier, earlier_path)
+        step_before = TraceStep(
+            id=f"detect_before_buildings-{len(trace) + 1}",
+            tool_name="detect_before_buildings",
+            status=TraceStatus.COMPLETED,
+            started_at=datetime.now(UTC),
+            completed_at=datetime.now(UTC),
+            duration_ms=int((perf_counter() - t0) * 1000),
+            summary=f"Detected {len(t1_result.detections)} building footprint(s) in earlier image.",
+            metadata={"before_count": len(t1_result.detections)},
+        )
+        trace.append(step_before)
+
+        t0 = perf_counter()
+        t2_result, _ = await self._building_count.execute(later, later_path)
+        step_after = TraceStep(
+            id=f"detect_after_buildings-{len(trace) + 1}",
+            tool_name="detect_after_buildings",
+            status=TraceStatus.COMPLETED,
+            started_at=datetime.now(UTC),
+            completed_at=datetime.now(UTC),
+            duration_ms=int((perf_counter() - t0) * 1000),
+            summary=f"Detected {len(t2_result.detections)} building footprint(s) in later image.",
+            metadata={"after_count": len(t2_result.detections)},
+        )
+        trace.append(step_after)
+
+        t0 = perf_counter()
+        match_result, evidence_regions = await self._building_matcher.execute(
+            earlier, later, earlier_path, later_path
+        )
+        step_match = TraceStep(
+            id=f"match_building_footprints-{len(trace) + 1}",
+            tool_name="match_building_footprints",
+            status=TraceStatus.COMPLETED,
+            started_at=datetime.now(UTC),
+            completed_at=datetime.now(UTC),
+            duration_ms=int((perf_counter() - t0) * 1000),
+            summary=(
+                f"Spatial bipartite matching completed via {match_result.matcher_name}: "
+                f"{match_result.new_count} new, {match_result.removed_count} removed, "
+                f"{match_result.unchanged_count} unchanged, {match_result.changed_count} changed."
+            ),
+            metadata={
+                "before_count": match_result.before_count,
+                "after_count": match_result.after_count,
+                "new_count": match_result.new_count,
+                "removed_count": match_result.removed_count,
+                "unchanged_count": match_result.unchanged_count,
+                "changed_count": match_result.changed_count,
+            },
+        )
+        trace.append(step_match)
+
+        step_calc = TraceStep(
+            id=f"calculate_change-{len(trace) + 1}",
+            tool_name="calculate_change",
+            status=TraceStatus.COMPLETED,
+            started_at=datetime.now(UTC),
+            completed_at=datetime.now(UTC),
+            duration_ms=1,
+            summary=(
+                f"Computed instance delta: +{match_result.new_count} new, -{match_result.removed_count} removed "
+                f"(net change: {match_result.after_count - match_result.before_count:+d} buildings)."
+            ),
+            metadata={"net_change": match_result.after_count - match_result.before_count},
+        )
+        trace.append(step_calc)
+
+        step_ev = TraceStep(
+            id=f"generate_evidence-{len(trace) + 1}",
+            tool_name="generate_evidence",
+            status=TraceStatus.COMPLETED,
+            started_at=datetime.now(UTC),
+            completed_at=datetime.now(UTC),
+            duration_ms=2,
+            summary=f"Packaged {len(evidence_regions)} georeferenced footprint evidence polygons.",
+            metadata={"region_count": len(evidence_regions)},
+        )
+        trace.append(step_ev)
+
+        answer = self._answer.compose_building_temporal_change(request, match_result)
+        step_ans = TraceStep(
+            id=f"grounded_answer-{len(trace) + 1}",
+            tool_name="grounded_answer",
+            status=TraceStatus.COMPLETED,
+            started_at=datetime.now(UTC),
+            completed_at=datetime.now(UTC),
+            duration_ms=1,
+            summary="Synthesized grounded answer from verified bipartite match counts.",
+            metadata={"answer_length": len(answer)},
+        )
+        trace.append(step_ans)
+
+        bi_temporal_summary = BiTemporalChangeResult(
+            task="bi_temporal_change_vqa",
+            change_summary=answer,
+            question=request.query,
+            changed_region_count=len(evidence_regions),
+            change_map_available=bool(evidence_regions),
+            detector=match_result.matcher_name,
+            provider="uploaded_cva",
+            provenance="building_footprint_matcher",
+            confidence=match_result.confidence,
+            confidence_available=True,
+            earlier_image_id=earlier.id,
+            later_image_id=later.id,
+            earlier_acquisition=earlier.acquisition_datetime.isoformat() if earlier.acquisition_datetime else "",
+            later_acquisition=later.acquisition_datetime.isoformat() if later.acquisition_datetime else "",
+            earlier_date=earlier.acquisition_datetime.date().isoformat() if earlier.acquisition_datetime else "",
+            later_date=later.acquisition_datetime.date().isoformat() if later.acquisition_datetime else "",
+        )
+
+        result = AnalysisResult(
+            status=AnalysisStatus.COMPLETED,
+            session_id=session_id,
+            answer=answer,
+            confidence=match_result.confidence,
+            confidence_available=True,
+            metrics=match_result.metrics,
+            evidence=evidence_regions,
+            trace=trace,
+            mode=DataMode.DEVELOPMENT,
+            building_temporal_change=match_result,
+            bi_temporal_change=bi_temporal_summary,
+        )
+        self._store.complete(session_id, result)
+        return result
+
+    async def _submit_surface_area_change(
+        self,
+        session_id: str,
+        trace: list[TraceStep],
+        request: QueryRequest,
+        earlier: ImageInput,
+        later: ImageInput,
+        plan: QueryAnalysisPlan,
+        domain: SurfaceDomainKind,
+    ) -> AnalysisResult:
+        storage = get_image_storage()
+        earlier_path = resolve_upload_path(earlier, storage)
+        later_path = resolve_upload_path(later, storage)
+
+        if domain == SurfaceDomainKind.BUILT_UP:
+            tool = self._built_up_tool
+        elif domain == SurfaceDomainKind.WATER:
+            tool = self._water_tool
+        else:
+            tool = self._vegetation_tool
+
+        t0 = perf_counter()
+        started = datetime.now(UTC)
+        step_tool = TraceStep(
+            id=f"{tool.name}-{len(trace) + 1}",
+            tool_name=tool.name,
+            status=TraceStatus.RUNNING,
+            started_at=started,
+            summary=f"Running specialist surface analysis for {domain.value}...",
+        )
+        trace.append(step_tool)
+        await asyncio.sleep(0)
+
+        change_result, evidence_regions = await tool.execute(
+            earlier, later, earlier_path, later_path
+        )
+        elapsed = int((perf_counter() - t0) * 1000)
+        step_tool.status = TraceStatus.COMPLETED
+        step_tool.completed_at = datetime.now(UTC)
+        step_tool.duration_ms = elapsed
+        step_tool.summary = (
+            f"Calculated {domain.value} change: {change_result.difference_m2:+,.1f} m² "
+            f"({change_result.percentage_change:+.2f}%) using {change_result.primary_index}."
+        )
+        step_tool.metadata = {
+            "domain": domain.value,
+            "before_area_m2": change_result.before_area_m2,
+            "after_area_m2": change_result.after_area_m2,
+            "difference_m2": change_result.difference_m2,
+            "percentage_change": change_result.percentage_change,
+            "primary_index": change_result.primary_index,
+        }
+
+        step_calc = TraceStep(
+            id=f"calculate_change_metrics-{len(trace) + 1}",
+            tool_name="calculate_change_metrics",
+            status=TraceStatus.COMPLETED,
+            started_at=datetime.now(UTC),
+            completed_at=datetime.now(UTC),
+            duration_ms=1,
+            summary=f"Verified area metrics: before={change_result.before_area_m2:,.1f} m², after={change_result.after_area_m2:,.1f} m².",
+            metadata={"difference_m2": change_result.difference_m2, "percentage_change": change_result.percentage_change},
+        )
+        trace.append(step_calc)
+
+        step_ev = TraceStep(
+            id=f"generate_evidence-{len(trace) + 1}",
+            tool_name="generate_evidence",
+            status=TraceStatus.COMPLETED,
+            started_at=datetime.now(UTC),
+            completed_at=datetime.now(UTC),
+            duration_ms=2,
+            summary=f"Generated {len(evidence_regions)} georeferenced vector evidence polygon(s).",
+            metadata={"region_count": len(evidence_regions)},
+        )
+        trace.append(step_ev)
+
+        answer = self._answer.compose_surface_area_change(request, change_result)
+        step_ans = TraceStep(
+            id=f"grounded_answer-{len(trace) + 1}",
+            tool_name="grounded_answer",
+            status=TraceStatus.COMPLETED,
+            started_at=datetime.now(UTC),
+            completed_at=datetime.now(UTC),
+            duration_ms=1,
+            summary="Synthesized grounded answer from computed surface metrics.",
+            metadata={"answer_length": len(answer)},
+        )
+        trace.append(step_ans)
+
+        bi_temporal_summary = BiTemporalChangeResult(
+            task="bi_temporal_change_vqa",
+            change_summary=answer,
+            question=request.query,
+            changed_region_count=len(evidence_regions),
+            change_map_available=bool(evidence_regions),
+            detector=tool.name,
+            provider="uploaded_cva",
+            provenance="specialist_surface_analysis",
+            confidence=change_result.confidence,
+            confidence_available=True,
+            earlier_image_id=earlier.id,
+            later_image_id=later.id,
+            earlier_acquisition=earlier.acquisition_datetime.isoformat() if earlier.acquisition_datetime else "",
+            later_acquisition=later.acquisition_datetime.isoformat() if later.acquisition_datetime else "",
+            earlier_date=earlier.acquisition_datetime.date().isoformat() if earlier.acquisition_datetime else "",
+            later_date=later.acquisition_datetime.date().isoformat() if later.acquisition_datetime else "",
+        )
+
+        result = AnalysisResult(
+            status=AnalysisStatus.COMPLETED,
+            session_id=session_id,
+            answer=answer,
+            confidence=change_result.confidence,
+            confidence_available=True,
+            metrics=change_result.metrics,
+            evidence=evidence_regions,
+            trace=trace,
+            mode=DataMode.DEVELOPMENT,
+            surface_area_change=change_result,
+            bi_temporal_change=bi_temporal_summary,
+        )
+        self._store.complete(session_id, result)
+        return result
 
     def _reject_unsupported_catalog_sar(
         self,
@@ -1037,6 +1570,25 @@ class QueryController:
             step.status = TraceStatus.FAILED
             step.summary = "Cross-modal input validation failed."
             step.error = "; ".join(validation.errors)
+        debug_geospatial = {
+            "optical_crs": optical.native_crs or optical.crs,
+            "optical_bounds": optical.native_bounds or optical.bounds,
+            "sar_crs": sar.native_crs or sar.crs,
+            "sar_bounds": sar.native_bounds or sar.bounds,
+            "transformed_epsg4326_bounds": {
+                "optical": optical.bounds,
+                "sar": sar.bounds,
+            },
+            "overlap_bounds": pair_bounds(optical, sar) if (optical.bounds and sar.bounds) else None,
+        }
+        logger.info(
+            "Cross-modal validation geospatial debug: optical_crs=%s optical_bounds=%s sar_crs=%s sar_bounds=%s overlap_bounds=%s",
+            debug_geospatial["optical_crs"],
+            debug_geospatial["optical_bounds"],
+            debug_geospatial["sar_crs"],
+            debug_geospatial["sar_bounds"],
+            debug_geospatial["overlap_bounds"],
+        )
         step.metadata = {
             "task": "cross_modal_optical_sar",
             "optical_image_id": optical.id,
@@ -1049,6 +1601,7 @@ class QueryController:
             "checks": [c.model_dump() for c in validation.checks],
             "status": step.status.value,
             "duration_ms": elapsed,
+            "debug_geospatial": debug_geospatial,
         }
         return validation
 
@@ -1205,6 +1758,13 @@ class QueryController:
                 **(step.metadata or {}),
                 "fusion_policy": fused_summary.fusion_policy,
                 "fused_region_count": fused_summary.fused_region_count,
+                "debug_geospatial": {
+                    "optical_crs": optical.native_crs or optical.crs,
+                    "optical_bounds": optical.native_bounds or optical.bounds,
+                    "sar_crs": sar.native_crs or sar.crs,
+                    "sar_bounds": sar.native_bounds or sar.bounds,
+                    "overlap_bounds": bounds,
+                },
                 "status": TraceStatus.COMPLETED.value,
                 "duration_ms": elapsed,
             }

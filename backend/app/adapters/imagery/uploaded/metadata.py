@@ -27,6 +27,9 @@ class RasterProbe:
     bounds: list[float] | None
     resolution_x: float | None
     resolution_y: float | None
+    transform: list[float] | None = None
+    native_crs: str | None = None
+    native_bounds: list[float] | None = None
 
 
 def extension_to_format(extension: str) -> ImageFormat | None:
@@ -98,7 +101,7 @@ def _bounds_from_geotags(
     return [min_lon, min_lat, max_lon, max_lat], res_x, res_y
 
 
-def probe_tiff(path: Path) -> RasterProbe:
+def _probe_tiff_with_tifffile(path: Path) -> RasterProbe:
     with tifffile.TiffFile(path) as tif:
         page = tif.pages[0]
         shape = page.shape
@@ -106,7 +109,10 @@ def probe_tiff(path: Path) -> RasterProbe:
             height, width = shape
             band_count = 1
         elif len(shape) == 3:
-            band_count, height, width = shape
+            if shape[2] <= 16 and shape[0] > 16:
+                height, width, band_count = shape
+            else:
+                band_count, height, width = shape
         else:
             raise ValueError("Unsupported TIFF dimensionality")
 
@@ -125,7 +131,26 @@ def probe_tiff(path: Path) -> RasterProbe:
 
         georeferenced = pixel_scale is not None and tiepoints is not None
         crs = _parse_geokeys(geokeys)
-        bounds, res_x, res_y = _bounds_from_geotags(pixel_scale, tiepoints, width, height)
+        raw_bounds, res_x, res_y = _bounds_from_geotags(pixel_scale, tiepoints, width, height)
+
+        bounds = raw_bounds
+        native_bounds = raw_bounds
+        transform_coeffs = None
+        if pixel_scale and tiepoints and len(tiepoints) >= 6:
+            scale_x, scale_y, _ = pixel_scale
+            _, _, _, origin_x, origin_y, _ = tiepoints[:6]
+            transform_coeffs = [float(scale_x), 0.0, float(origin_x), 0.0, float(-abs(scale_y)), float(origin_y)]
+
+        if raw_bounds and crs and crs != "EPSG:4326":
+            try:
+                from rasterio.warp import transform_bounds
+
+                w_left, w_bottom, w_right, w_top = transform_bounds(
+                    crs, "EPSG:4326", raw_bounds[0], raw_bounds[1], raw_bounds[2], raw_bounds[3]
+                )
+                bounds = [min(w_left, w_right), min(w_bottom, w_top), max(w_left, w_right), max(w_bottom, w_top)]
+            except Exception:
+                pass
 
         band_names = None
         if band_count > 1:
@@ -142,7 +167,137 @@ def probe_tiff(path: Path) -> RasterProbe:
             bounds=bounds,
             resolution_x=res_x,
             resolution_y=res_y,
+            transform=transform_coeffs,
+            native_crs=crs,
+            native_bounds=native_bounds,
         )
+
+
+def probe_tiff(path: Path) -> RasterProbe:
+    try:
+        import rasterio
+        from rasterio.warp import transform_bounds
+
+        with rasterio.open(str(path)) as ds:
+            width = int(ds.width)
+            height = int(ds.height)
+            band_count = int(ds.count)
+            dtype = str(ds.dtypes[0]) if ds.dtypes else "uint8"
+
+            crs_str = None
+            if ds.crs:
+                epsg = ds.crs.to_epsg()
+                if epsg:
+                    crs_str = f"EPSG:{epsg}"
+                else:
+                    # Check geokeys fallback if rasterio yields LOCAL_CS or unparsed EPSG
+                    geokeys = None
+                    try:
+                        with tifffile.TiffFile(path) as tif:
+                            if _TAG_GEO_KEY_DIRECTORY in tif.pages[0].tags:
+                                geokeys = tif.pages[0].tags[_TAG_GEO_KEY_DIRECTORY].value
+                    except Exception:
+                        pass
+                    fallback_crs = _parse_geokeys(geokeys)
+                    if fallback_crs:
+                        crs_str = fallback_crs
+                    elif (
+                        ds.bounds
+                        and -180.0 <= ds.bounds.left <= 180.0
+                        and -180.0 <= ds.bounds.right <= 180.0
+                        and -90.0 <= ds.bounds.bottom <= 90.0
+                        and -90.0 <= ds.bounds.top <= 90.0
+                    ):
+                        crs_str = "EPSG:4326"
+                    else:
+                        crs_str = ds.crs.to_string()
+
+            transform_coeffs = (
+                [float(x) for x in ds.transform[:6]] if ds.transform is not None else None
+            )
+            native_bounds = [
+                float(ds.bounds.left),
+                float(ds.bounds.bottom),
+                float(ds.bounds.right),
+                float(ds.bounds.top),
+            ]
+
+            has_transform = ds.transform is not None and not ds.transform.is_identity
+            georeferenced = bool(ds.crs is not None or has_transform)
+
+            bounds_4326 = None
+            if georeferenced and ds.bounds:
+                if ds.crs and ds.crs.to_epsg() == 4326:
+                    min_lon = min(float(ds.bounds.left), float(ds.bounds.right))
+                    max_lon = max(float(ds.bounds.left), float(ds.bounds.right))
+                    min_lat = min(float(ds.bounds.bottom), float(ds.bounds.top))
+                    max_lat = max(float(ds.bounds.bottom), float(ds.bounds.top))
+                    bounds_4326 = [min_lon, min_lat, max_lon, max_lat]
+                elif ds.crs:
+                    try:
+                        w_left, w_bottom, w_right, w_top = transform_bounds(
+                            ds.crs,
+                            "EPSG:4326",
+                            ds.bounds.left,
+                            ds.bounds.bottom,
+                            ds.bounds.right,
+                            ds.bounds.top,
+                        )
+                        min_lon = min(float(w_left), float(w_right))
+                        max_lon = max(float(w_left), float(w_right))
+                        min_lat = min(float(w_bottom), float(w_top))
+                        max_lat = max(float(w_bottom), float(w_top))
+                        bounds_4326 = [min_lon, min_lat, max_lon, max_lat]
+                    except Exception:
+                        bounds_4326 = [
+                            min(float(ds.bounds.left), float(ds.bounds.right)),
+                            min(float(ds.bounds.bottom), float(ds.bounds.top)),
+                            max(float(ds.bounds.left), float(ds.bounds.right)),
+                            max(float(ds.bounds.bottom), float(ds.bounds.top)),
+                        ]
+                else:
+                    if (
+                        -180.0 <= ds.bounds.left <= 180.0
+                        and -180.0 <= ds.bounds.right <= 180.0
+                        and -90.0 <= ds.bounds.bottom <= 90.0
+                        and -90.0 <= ds.bounds.top <= 90.0
+                    ):
+                        min_lon = min(float(ds.bounds.left), float(ds.bounds.right))
+                        max_lon = max(float(ds.bounds.left), float(ds.bounds.right))
+                        min_lat = min(float(ds.bounds.bottom), float(ds.bounds.top))
+                        max_lat = max(float(ds.bounds.bottom), float(ds.bounds.top))
+                        bounds_4326 = [min_lon, min_lat, max_lon, max_lat]
+                        if not crs_str:
+                            crs_str = "EPSG:4326"
+                    else:
+                        bounds_4326 = [
+                            min(float(ds.bounds.left), float(ds.bounds.right)),
+                            min(float(ds.bounds.bottom), float(ds.bounds.top)),
+                            max(float(ds.bounds.left), float(ds.bounds.right)),
+                            max(float(ds.bounds.bottom), float(ds.bounds.top)),
+                        ]
+
+            res_x = float(abs(ds.transform.a)) if ds.transform else None
+            res_y = float(abs(ds.transform.e)) if ds.transform else None
+            band_names = [f"band_{i + 1}" for i in range(band_count)] if band_count > 1 else None
+
+            return RasterProbe(
+                width=width,
+                height=height,
+                band_count=band_count,
+                dtype=dtype,
+                band_names=band_names,
+                georeferenced=georeferenced,
+                crs=crs_str,
+                bounds=bounds_4326,
+                resolution_x=res_x,
+                resolution_y=res_y,
+                transform=transform_coeffs,
+                native_crs=crs_str,
+                native_bounds=native_bounds,
+            )
+    except Exception:
+        return _probe_tiff_with_tifffile(path)
 
 
 def probe_png_jpeg(path: Path) -> RasterProbe:

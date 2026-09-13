@@ -216,6 +216,42 @@ export function QueryComposer({
           </button>
         </div>
 
+        <div className="flex flex-wrap gap-1.5 px-0.5" data-testid="composer-suggestions">
+          {(isTemporalPair
+            ? [
+                "How many buildings increased?",
+                "Has the built-up area increased?",
+                "Has water surface area expanded or receded?",
+                "Has vegetation cover changed?",
+              ]
+            : isUpload
+            ? [
+                "How many buildings are there?",
+                "Describe the land-cover and major objects visible",
+                "Detect building footprints",
+              ]
+            : isCrossModal
+            ? [
+                "Identify built-up and water-covered regions using optical and SAR",
+                "Compare surface backscatter to optical reflectance",
+              ]
+            : [
+                "Has construction activity occurred in this area?",
+                "Has vegetation density changed?",
+                "Detect spectral change",
+              ]
+          ).map((suggestion) => (
+            <button
+              key={suggestion}
+              type="button"
+              className="text-[11px] px-2 py-0.5 rounded border border-[var(--border)] bg-[var(--surface-sunken)] hover:bg-[var(--surface-hover)] text-[var(--text-muted)] hover:text-[var(--text-primary)] transition-colors truncate max-w-full text-left"
+              onClick={() => onQueryChange(suggestion)}
+            >
+              {suggestion}
+            </button>
+          ))}
+        </div>
+
         <form
           className="composer-row"
           onSubmit={(e) => {

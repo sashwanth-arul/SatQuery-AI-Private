@@ -18,16 +18,50 @@ _CAPTION_PHRASES = (
 )
 
 
+def is_building_count_query(query: str) -> bool:
+    q = query.strip().lower()
+    tokens = {w.strip(".,!?\"'") for w in q.split()}
+    has_count_word = bool(
+        {"count", "number", "quantity", "many"} & tokens
+        or "how many" in q
+        or "total number" in q
+    )
+    has_building_word = bool(
+        {"building", "buildings", "structures", "houses", "rooftops"} & tokens
+        or "built-up" in q
+    )
+    return has_count_word and has_building_word
+
+
+def is_grounding_query(query: str) -> bool:
+    q = query.strip().lower()
+    return any(
+        p in q
+        for p in (
+            "locate",
+            "bounding box",
+            "where is",
+            "where are",
+            "ground ",
+            "grounding",
+            "detect and locate",
+        )
+    )
+
+
 def single_image_intent_from_query(query: str) -> QueryIntent:
     """
-    Distinguish scene-description (caption) from targeted VQA on uploaded images.
-
-    Caption: general scene description ("Describe this satellite scene.").
-    VQA: specific interrogative or analytical questions ("What land-cover types are visible?").
+    Distinguish building count, grounding, scene-description (caption), and targeted VQA on uploaded images.
     """
     q = query.strip().lower()
     if not q:
         return QueryIntent.SINGLE_IMAGE_VQA
+
+    if is_building_count_query(query):
+        return QueryIntent.BUILDING_COUNT
+
+    if is_grounding_query(query):
+        return QueryIntent.GROUNDING
 
     if any(phrase in q for phrase in _CAPTION_PHRASES):
         return QueryIntent.SINGLE_IMAGE_CAPTION

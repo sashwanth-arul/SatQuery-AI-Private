@@ -100,5 +100,12 @@ def validate_raster_pair(
 
 
 def resolve_upload_path(image: ImageInput, storage) -> Path:
+    if image.filename:
+        suffix = Path(image.filename).suffix.lower()
+        if suffix in {".tif", ".tiff", ".png", ".jpg", ".jpeg"}:
+            try:
+                return storage.path_for(image.id, suffix)
+            except SatQueryError:
+                pass
     ext = _extension_for_format(image.format)
     return storage.path_for(image.id, ext)

@@ -1,10 +1,12 @@
 from __future__ import annotations
 
 from app.schemas.bi_temporal_change import BiTemporalChangeResult
+from app.schemas.building_analysis import BuildingDetectionResult, BuildingTemporalMatchResult
 from app.schemas.change_domain import ChangeDomain
 from app.schemas.cross_modal import CrossModalOpticalSARResult
 from app.schemas.domain import DataMode, GenerateEvidenceOutput, QueryRequest, SensorType
 from app.schemas.imagery_policy import ImageryPolicyReport, PolicyDecision
+from app.schemas.surface_change import SurfaceAreaChangeResult, SurfaceDomainKind
 from app.schemas.vqa import SingleImageCaptionResult, SingleImageVQAResult, VQAProviderKind
 from app.services.change_domain import (
     compose_domain_answer_clause,
@@ -360,4 +362,49 @@ class AnswerEngine:
             f"({t1}, {t2}{mismatch}). "
             "Individual building segmentation and temporal matching are not yet implemented "
             "(Phase 5B); no building footprints or instance-level claims are produced."
+        )
+
+    def compose_building_count(
+        self,
+        request: QueryRequest,
+        result: BuildingDetectionResult,
+    ) -> str:
+        pct = round(result.confidence * 100)
+        return (
+            f"Detected {result.count} building footprint{'s' if result.count != 1 else ''} "
+            f"within the scene using {result.detector_name} (confidence {pct}%, "
+            f"total footprint area {result.total_area_m2:,.1f} m²). "
+            f"All {result.count} spatial footprints are delineated and mapped as vector evidence."
+        )
+
+    def compose_building_temporal_change(
+        self,
+        request: QueryRequest,
+        result: BuildingTemporalMatchResult,
+    ) -> str:
+        pct = round(result.confidence * 100)
+        return (
+            f"Spatial bipartite building footprint matching identified: "
+            f"{result.before_count} building(s) in earlier observation and {result.after_count} in later observation. "
+            f"Instance change breakdown: {result.new_count} newly constructed, "
+            f"{result.removed_count} removed/demolished, {result.unchanged_count} unchanged, and "
+            f"{result.changed_count} significantly modified (matcher confidence {pct}%). "
+            f"Footprint classifications are georeferenced and mapped."
+        )
+
+    def compose_surface_area_change(
+        self,
+        request: QueryRequest,
+        result: SurfaceAreaChangeResult,
+    ) -> str:
+        pct = round(result.confidence * 100)
+        domain_label = "built-up" if result.domain == SurfaceDomainKind.BUILT_UP else result.domain.value.replace("_", " ")
+        sign = "+" if result.difference_m2 > 0 else ""
+        pct_sign = "+" if result.percentage_change > 0 else ""
+        return (
+            f"Bi-temporal {domain_label} surface analysis ({result.primary_index}): "
+            f"Earlier area was {result.before_area_m2:,.1f} m²; later area is {result.after_area_m2:,.1f} m² "
+            f"({sign}{result.difference_m2:,.1f} m², {pct_sign}{result.percentage_change:.2f}% change, confidence {pct}%). "
+            f"{len(result.evidence_regions)} mapped change vector polygon{'s' if len(result.evidence_regions) != 1 else ''} "
+            f"are available in the evidence inspector."
         )

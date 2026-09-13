@@ -29,6 +29,16 @@ def assert_safe_image_id(image_id: str) -> None:
         )
 
 
+_EXTENSION_ALIASES: dict[str, list[str]] = {
+    ".tif": [".tif", ".tiff", ".geotiff"],
+    ".tiff": [".tiff", ".tif", ".geotiff"],
+    ".geotiff": [".tif", ".tiff", ".geotiff"],
+    ".jpg": [".jpg", ".jpeg"],
+    ".jpeg": [".jpeg", ".jpg"],
+    ".png": [".png"],
+}
+
+
 class LocalFilesystemStorage(ImageStorage):
     """Local filesystem storage for development and single-node deployments."""
 
@@ -54,6 +64,21 @@ class LocalFilesystemStorage(ImageStorage):
             )
         return path
 
+    def _find_existing_path(self, image_id: str, extension: str) -> Path | None:
+        assert_safe_image_id(image_id)
+        norm_ext = normalize_extension(extension)
+        candidates = _EXTENSION_ALIASES.get(norm_ext, [norm_ext])
+        for ext in candidates:
+            try:
+                candidate_path = self._object_path(image_id, ext)
+                if candidate_path.exists():
+                    return candidate_path
+            except SatQueryError as exc:
+                if exc.code in ("invalid_image_id", "path_traversal"):
+                    raise
+                continue
+        return None
+
     def save(self, image_id: str, extension: str, stream: BinaryIO) -> Path:
         path = self._object_path(image_id, extension)
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -66,8 +91,8 @@ class LocalFilesystemStorage(ImageStorage):
         return path
 
     def open(self, image_id: str, extension: str) -> BinaryIO:
-        path = self._object_path(image_id, extension)
-        if not path.exists():
+        path = self._find_existing_path(image_id, extension)
+        if path is None:
             raise SatQueryError(
                 code="image_not_found",
                 message="Image not found.",
@@ -77,18 +102,18 @@ class LocalFilesystemStorage(ImageStorage):
 
     def exists(self, image_id: str, extension: str) -> bool:
         try:
-            return self._object_path(image_id, extension).exists()
+            return self._find_existing_path(image_id, extension) is not None
         except SatQueryError:
             return False
 
     def delete(self, image_id: str, extension: str) -> None:
-        path = self._object_path(image_id, extension)
-        if path.exists():
+        path = self._find_existing_path(image_id, extension)
+        if path is not None and path.exists():
             path.unlink()
 
     def path_for(self, image_id: str, extension: str) -> Path:
-        path = self._object_path(image_id, extension)
-        if not path.exists():
+        path = self._find_existing_path(image_id, extension)
+        if path is None:
             raise SatQueryError(
                 code="image_not_found",
                 message="Image not found.",

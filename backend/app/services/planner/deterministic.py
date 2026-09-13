@@ -85,6 +85,91 @@ def build_deterministic_plan(
         )
 
     if request.is_bi_temporal_upload:
+        q_lower = request.query.strip().lower()
+        tokens = {w.strip(".,!?\"'") for w in q_lower.split()}
+
+        # 1. Building footprint matching
+        if bool({"building", "buildings", "houses", "structures"} & tokens) and bool(
+            {"increase", "increased", "new", "added", "decrease", "decreased", "removed", "change", "changed", "how many", "count"} & tokens
+            or "how many" in q_lower
+        ):
+            return QueryAnalysisPlan(
+                user_intent=QueryIntent.BUILDING_TEMPORAL_CHANGE,
+                requested_modalities=[RequestedModality.OPTICAL],
+                analysis_profile=AnalysisProfileName.NONE,
+                required_tools=[
+                    PlannerToolName.DETECT_BUILDINGS,
+                    PlannerToolName.MATCH_BUILDING_FOOTPRINTS,
+                    PlannerToolName.GENERATE_EVIDENCE,
+                ],
+                earlier_date=None,
+                later_date=None,
+                sensor_requirement=SensorRequirement.NOT_APPLICABLE,
+                aoi_required=False,
+                user_intent_summary="Route to uploaded bi-temporal building footprint detection and spatial matching specialist.",
+                planner=planner,  # type: ignore[arg-type]
+            )
+
+        # 2. Built-up area change
+        if "built-up area" in q_lower or "built up area" in q_lower or "urban area" in q_lower or ("built-up" in q_lower and "area" in q_lower):
+            return QueryAnalysisPlan(
+                user_intent=QueryIntent.BUILT_UP_AREA_CHANGE,
+                requested_modalities=[RequestedModality.OPTICAL],
+                analysis_profile=AnalysisProfileName.NONE,
+                required_tools=[
+                    PlannerToolName.ANALYZE_BUILT_UP,
+                    PlannerToolName.GENERATE_EVIDENCE,
+                ],
+                earlier_date=None,
+                later_date=None,
+                sensor_requirement=SensorRequirement.NOT_APPLICABLE,
+                aoi_required=False,
+                user_intent_summary="Route to uploaded bi-temporal built-up surface area change specialist.",
+                planner=planner,  # type: ignore[arg-type]
+            )
+
+        # 3. Water change
+        if bool({"water", "lake", "reservoir", "river"} & tokens) and bool(
+            {"shrinkage", "shrinking", "drying", "receding", "increase", "expansion", "expanded", "change", "lost", "gain"} & tokens
+            or "water body" in q_lower
+            or "water-body" in q_lower
+        ):
+            return QueryAnalysisPlan(
+                user_intent=QueryIntent.WATER_CHANGE,
+                requested_modalities=[RequestedModality.OPTICAL],
+                analysis_profile=AnalysisProfileName.NONE,
+                required_tools=[
+                    PlannerToolName.ANALYZE_WATER_CHANGE,
+                    PlannerToolName.GENERATE_EVIDENCE,
+                ],
+                earlier_date=None,
+                later_date=None,
+                sensor_requirement=SensorRequirement.NOT_APPLICABLE,
+                aoi_required=False,
+                user_intent_summary="Route to uploaded bi-temporal water surface change specialist.",
+                planner=planner,  # type: ignore[arg-type]
+            )
+
+        # 4. Vegetation change
+        if bool({"vegetation", "forest", "canopy", "tree", "trees"} & tokens) and bool(
+            {"loss", "lost", "decrease", "deforestation", "deforest", "growth", "greening", "change"} & tokens
+        ):
+            return QueryAnalysisPlan(
+                user_intent=QueryIntent.VEGETATION_CHANGE,
+                requested_modalities=[RequestedModality.OPTICAL],
+                analysis_profile=AnalysisProfileName.NONE,
+                required_tools=[
+                    PlannerToolName.ANALYZE_VEGETATION_CHANGE,
+                    PlannerToolName.GENERATE_EVIDENCE,
+                ],
+                earlier_date=None,
+                later_date=None,
+                sensor_requirement=SensorRequirement.NOT_APPLICABLE,
+                aoi_required=False,
+                user_intent_summary="Route to uploaded bi-temporal vegetation canopy change specialist.",
+                planner=planner,  # type: ignore[arg-type]
+            )
+
         change_domain = resolve_change_domain(request.query)
         return QueryAnalysisPlan(
             user_intent=QueryIntent.BI_TEMPORAL_CHANGE_VQA,
@@ -115,6 +200,38 @@ def build_deterministic_plan(
             else [RequestedModality.OPTICAL]
         )
         intent = single_image_intent_from_query(request.query)
+        if intent == QueryIntent.BUILDING_COUNT:
+            return QueryAnalysisPlan(
+                user_intent=QueryIntent.BUILDING_COUNT,
+                requested_modalities=requested,
+                analysis_profile=AnalysisProfileName.NONE,
+                required_tools=[
+                    PlannerToolName.DETECT_BUILDINGS,
+                    PlannerToolName.GENERATE_EVIDENCE,
+                ],
+                earlier_date=None,
+                later_date=None,
+                sensor_requirement=SensorRequirement.NOT_APPLICABLE,
+                aoi_required=False,
+                user_intent_summary="Route to building detection and exact object counting specialist.",
+                planner=planner,  # type: ignore[arg-type]
+            )
+        if intent == QueryIntent.GROUNDING:
+            return QueryAnalysisPlan(
+                user_intent=QueryIntent.GROUNDING,
+                requested_modalities=requested,
+                analysis_profile=AnalysisProfileName.NONE,
+                required_tools=[
+                    PlannerToolName.GROUND_OBJECTS,
+                    PlannerToolName.GENERATE_EVIDENCE,
+                ],
+                earlier_date=None,
+                later_date=None,
+                sensor_requirement=SensorRequirement.NOT_APPLICABLE,
+                aoi_required=False,
+                user_intent_summary="Route to spatial object grounding and localization specialist.",
+                planner=planner,  # type: ignore[arg-type]
+            )
         if intent == QueryIntent.SINGLE_IMAGE_CAPTION:
             return QueryAnalysisPlan(
                 user_intent=QueryIntent.SINGLE_IMAGE_CAPTION,

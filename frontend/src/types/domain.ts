@@ -83,6 +83,9 @@ export interface ImageInput {
   benchmark_pair_id?: string | null;
   bounds?: number[] | null;
   crs?: string | null;
+  transform?: number[] | null;
+  native_crs?: string | null;
+  native_bounds?: number[] | null;
 }
 
 export interface UploadImageResponse {
@@ -395,6 +398,61 @@ export interface TraceStep {
   metadata?: PlanQueryMetadata | Record<string, unknown> | null;
 }
 
+export type BuildingStatus = "unchanged" | "new" | "removed" | "significantly_changed";
+
+export interface BuildingFootprint {
+  id: string;
+  geometry: GeoJSONGeometry;
+  bbox: [number, number, number, number];
+  area_m2: number;
+  confidence: number;
+  status: BuildingStatus;
+  iou_with_match?: number | null;
+  matched_id?: string | null;
+}
+
+export interface BuildingDetectionResult {
+  image_id: string;
+  count: number;
+  detections: BuildingFootprint[];
+  confidence: number;
+  detector_name: string;
+  total_area_m2: number;
+  metrics: Metric[];
+}
+
+export interface BuildingTemporalMatchResult {
+  earlier_image_id: string;
+  later_image_id: string;
+  before_count: number;
+  after_count: number;
+  new_count: number;
+  removed_count: number;
+  unchanged_count: number;
+  changed_count: number;
+  confidence: number;
+  matcher_name: string;
+  matched_footprints: BuildingFootprint[];
+  metrics: Metric[];
+}
+
+export type SurfaceDomainKind = "built_up" | "water" | "vegetation";
+
+export interface SurfaceAreaChangeResult {
+  domain: SurfaceDomainKind;
+  earlier_image_id: string;
+  later_image_id: string;
+  before_area_m2: number;
+  after_area_m2: number;
+  difference_m2: number;
+  percentage_change: number;
+  primary_index: string;
+  confidence: number;
+  evidence_regions: EvidenceRegion[];
+  metrics: Metric[];
+  metadata?: Record<string, unknown>;
+}
+
 export interface AnalysisResult {
   status: AnalysisStatus;
   session_id: string;
@@ -410,6 +468,9 @@ export interface AnalysisResult {
   caption?: SingleImageCaptionResult | null;
   bi_temporal_change?: BiTemporalChangeResult | null;
   cross_modal?: CrossModalOpticalSARResult | null;
+  building_detection?: BuildingDetectionResult | null;
+  building_temporal_change?: BuildingTemporalMatchResult | null;
+  surface_area_change?: SurfaceAreaChangeResult | null;
 }
 
 export interface ApiResponse<T> {

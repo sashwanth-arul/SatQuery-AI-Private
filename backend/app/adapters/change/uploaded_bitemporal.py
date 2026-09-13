@@ -1,8 +1,11 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 import re
 from pathlib import Path
+
+logger = logging.getLogger(__name__)
 
 from app.adapters.change.base import ChangeDetector
 from app.adapters.change.bi_temporal.errors import BiTemporalPipelineError
@@ -67,10 +70,10 @@ class UploadedBiTemporalChangeDetector(ChangeDetector):
     def _detect_sync(self, payload: ChangeDetectionInput) -> ChangeDetectionOutput:
         earlier_meta, later_meta, query_hint = _resolve_image_inputs(payload)
         storage = get_image_storage()
-        earlier_path = resolve_upload_path(earlier_meta, storage)
-        later_path = resolve_upload_path(later_meta, storage)
 
         try:
+            earlier_path = resolve_upload_path(earlier_meta, storage)
+            later_path = resolve_upload_path(later_meta, storage)
             result = self._pipeline.run(
                 earlier_path,
                 later_path,
@@ -79,13 +82,29 @@ class UploadedBiTemporalChangeDetector(ChangeDetector):
                 query_hint=query_hint or payload.query_hint or "",
             )
         except BiTemporalPipelineError:
+            logger.exception(
+                "BiTemporalPipelineError during bi-temporal change detection for %s vs %s",
+                earlier_meta.id,
+                later_meta.id,
+            )
             raise
         except SatQueryError:
+            logger.exception(
+                "SatQueryError during bi-temporal change detection for %s vs %s",
+                earlier_meta.id,
+                later_meta.id,
+            )
             raise
         except Exception as exc:
+            logger.exception(
+                "Unexpected failure during uploaded bi-temporal change detection for %s vs %s: %s",
+                earlier_meta.id,
+                later_meta.id,
+                exc,
+            )
             raise SatQueryError(
                 "change_detection_failed",
-                "Uploaded bi-temporal change detection failed.",
+                f"Uploaded bi-temporal change detection failed: {exc}",
                 status_code=500,
             ) from exc
 

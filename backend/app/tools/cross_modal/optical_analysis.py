@@ -16,23 +16,23 @@ class UploadedOpticalAnalysisTool:
     async def execute(self, payload: OpticalAnalysisInput) -> ModalityAnalysisSummary:
         bounds = payload.bounds
         digest = hashlib.sha256(f"optical:{payload.optical_image_id}:{payload.query}".encode()).hexdigest()[:8]
-        aoi = aoi_from_bounds(bounds)
-        ring = aoi.geometry.coordinates[0]
-        west, south = ring[0][0], ring[0][1]
-        east, north = ring[2][0], ring[2][1]
+        west = min(bounds[0], bounds[2])
+        south = min(bounds[1], bounds[3])
+        east = max(bounds[0], bounds[2])
+        north = max(bounds[1], bounds[3])
         cx = (west + east) / 2
         cy = (south + north) / 2
-        w = (east - west) * 0.25
-        h = (north - south) * 0.25
+        w = max((east - west) * 0.25, 0.0001)
+        h = max((north - south) * 0.25, 0.0001)
         built_poly = GeoJSONGeometry(
             type="Polygon",
             coordinates=[
                 [
-                    [cx - w / 2, cy - h / 2],
-                    [cx + w / 2, cy - h / 2],
-                    [cx + w / 2, cy + h / 2],
-                    [cx - w / 2, cy + h / 2],
-                    [cx - w / 2, cy - h / 2],
+                    [round(cx - w / 2, 6), round(cy - h / 2, 6)],
+                    [round(cx + w / 2, 6), round(cy - h / 2, 6)],
+                    [round(cx + w / 2, 6), round(cy + h / 2, 6)],
+                    [round(cx - w / 2, 6), round(cy + h / 2, 6)],
+                    [round(cx - w / 2, 6), round(cy - h / 2, 6)],
                 ]
             ],
         )
@@ -41,11 +41,11 @@ class UploadedOpticalAnalysisTool:
             type="Polygon",
             coordinates=[
                 [
-                    [cx - w / 2, water_cy - h / 4],
-                    [cx + w / 2, water_cy - h / 4],
-                    [cx + w / 2, water_cy + h / 4],
-                    [cx - w / 2, water_cy + h / 4],
-                    [cx - w / 2, water_cy - h / 4],
+                    [round(cx - w / 2, 6), round(water_cy - h / 4, 6)],
+                    [round(cx + w / 2, 6), round(water_cy - h / 4, 6)],
+                    [round(cx + w / 2, 6), round(water_cy + h / 4, 6)],
+                    [round(cx - w / 2, 6), round(water_cy + h / 4, 6)],
+                    [round(cx - w / 2, 6), round(water_cy - h / 4, 6)],
                 ]
             ],
         )

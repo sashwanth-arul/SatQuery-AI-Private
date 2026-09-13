@@ -75,6 +75,18 @@ class ImageInput(BaseModel):
         default=None,
         description="Auditable pair token linking co-registered benchmark uploads.",
     )
+    transform: list[float] | None = Field(
+        default=None,
+        description="Affine transform coefficients [a, b, c, d, e, f]",
+    )
+    native_crs: str | None = Field(
+        default=None,
+        description="Native raster CRS before EPSG:4326 conversion",
+    )
+    native_bounds: list[float] | None = Field(
+        default=None,
+        description="Native raster bounds in source CRS [left, bottom, right, top]",
+    )
 
 
 class SingleImageInput(BaseModel):

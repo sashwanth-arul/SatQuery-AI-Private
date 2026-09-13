@@ -15,6 +15,11 @@ class QueryIntent(str, Enum):
     SPECTRAL_CHANGE = "spectral_change"
     CONSTRUCTION = "construction"
     BUILDING_TEMPORAL_CHANGE = "building_temporal_change"
+    BUILDING_COUNT = "building_count"
+    BUILT_UP_AREA_CHANGE = "built_up_area_change"
+    WATER_CHANGE = "water_change"
+    VEGETATION_CHANGE = "vegetation_change"
+    GROUNDING = "grounding"
     RADAR_CHANGE = "radar_change"
     MULTIMODAL_COMPARISON = "multimodal_comparison"
     SINGLE_IMAGE_VQA = "single_image_vqa"
@@ -43,6 +48,12 @@ class PlannerToolName(str, Enum):
     OPTICAL_ANALYSIS = "optical_analysis"
     SAR_ANALYSIS = "sar_analysis"
     CROSS_MODAL_FUSION = "cross_modal_fusion"
+    DETECT_BUILDINGS = "detect_buildings"
+    MATCH_BUILDING_FOOTPRINTS = "match_building_footprints"
+    ANALYZE_BUILT_UP = "analyze_built_up"
+    ANALYZE_WATER_CHANGE = "analyze_water_change"
+    ANALYZE_VEGETATION_CHANGE = "analyze_vegetation_change"
+    GROUND_OBJECTS = "ground_objects"
 
 
 class SensorRequirement(str, Enum):
@@ -165,16 +176,81 @@ class QueryAnalysisPlan(BaseModel):
                 raise ValueError("cross_modal_optical_sar must set aoi_required=False")
             return self
 
+        if self.user_intent == QueryIntent.BUILDING_COUNT:
+            expected = {PlannerToolName.DETECT_BUILDINGS, PlannerToolName.GENERATE_EVIDENCE}
+            if tools != expected:
+                raise ValueError("building_count requires detect_buildings and generate_evidence only")
+            if self.earlier_date is not None or self.later_date is not None:
+                raise ValueError("building_count must not include temporal dates")
+            if self.aoi_required:
+                raise ValueError("building_count must set aoi_required=False")
+            return self
+
+        if self.user_intent == QueryIntent.GROUNDING:
+            expected = {PlannerToolName.GROUND_OBJECTS, PlannerToolName.GENERATE_EVIDENCE}
+            if tools != expected:
+                raise ValueError("grounding requires ground_objects and generate_evidence only")
+            if self.earlier_date is not None or self.later_date is not None:
+                raise ValueError("grounding must not include temporal dates")
+            if self.aoi_required:
+                raise ValueError("grounding must set aoi_required=False")
+            return self
+
+        if self.user_intent == QueryIntent.BUILT_UP_AREA_CHANGE:
+            expected = {PlannerToolName.ANALYZE_BUILT_UP, PlannerToolName.GENERATE_EVIDENCE}
+            if tools != expected:
+                raise ValueError("built_up_area_change requires analyze_built_up and generate_evidence only")
+            if self.earlier_date is not None or self.later_date is not None:
+                raise ValueError("built_up_area_change must not include catalog temporal dates")
+            if self.aoi_required:
+                raise ValueError("built_up_area_change must set aoi_required=False")
+            return self
+
+        if self.user_intent == QueryIntent.WATER_CHANGE:
+            expected = {PlannerToolName.ANALYZE_WATER_CHANGE, PlannerToolName.GENERATE_EVIDENCE}
+            if tools != expected:
+                raise ValueError("water_change requires analyze_water_change and generate_evidence only")
+            if self.earlier_date is not None or self.later_date is not None:
+                raise ValueError("water_change must not include catalog temporal dates")
+            if self.aoi_required:
+                raise ValueError("water_change must set aoi_required=False")
+            return self
+
+        if self.user_intent == QueryIntent.VEGETATION_CHANGE:
+            expected = {PlannerToolName.ANALYZE_VEGETATION_CHANGE, PlannerToolName.GENERATE_EVIDENCE}
+            if tools != expected:
+                raise ValueError("vegetation_change requires analyze_vegetation_change and generate_evidence only")
+            if self.earlier_date is not None or self.later_date is not None:
+                raise ValueError("vegetation_change must not include catalog temporal dates")
+            if self.aoi_required:
+                raise ValueError("vegetation_change must set aoi_required=False")
+            return self
+
         if self.user_intent == QueryIntent.BUILDING_TEMPORAL_CHANGE:
+            if not self.aoi_required:
+                # Uploaded pair building footprint matching mode
+                expected = {
+                    PlannerToolName.DETECT_BUILDINGS,
+                    PlannerToolName.MATCH_BUILDING_FOOTPRINTS,
+                    PlannerToolName.GENERATE_EVIDENCE,
+                }
+                if tools != expected:
+                    raise ValueError(
+                        "uploaded building_temporal_change requires detect_buildings, "
+                        "match_building_footprints, and generate_evidence only"
+                    )
+                if self.earlier_date is not None or self.later_date is not None:
+                    raise ValueError("uploaded building_temporal_change must not include catalog dates")
+                return self
+
+            # Catalog mode requires imagery_policy
             expected = {PlannerToolName.IMAGERY_POLICY}
             if tools != expected:
-                raise ValueError("building_temporal_change requires imagery_policy only")
+                raise ValueError("catalog building_temporal_change requires imagery_policy only")
             if self.earlier_date is None or self.later_date is None:
                 raise ValueError("building_temporal_change requires earlier_date and later_date")
             if self.later_date <= self.earlier_date:
                 raise ValueError("later_date must be after earlier_date")
-            if not self.aoi_required:
-                raise ValueError("building_temporal_change must set aoi_required=True")
             return self
 
         if self.earlier_date is None or self.later_date is None:
@@ -194,6 +270,13 @@ class QueryAnalysisPlan(BaseModel):
             raise ValueError("sar_analysis is only valid for cross_modal_optical_sar intent")
         if PlannerToolName.CROSS_MODAL_FUSION in tools:
             raise ValueError("cross_modal_fusion is only valid for cross_modal_optical_sar intent")
+        if PlannerToolName.DETECT_BUILDINGS in tools and self.user_intent not in (
+            QueryIntent.BUILDING_COUNT,
+            QueryIntent.BUILDING_TEMPORAL_CHANGE,
+        ):
+            raise ValueError("detect_buildings is only valid for building intents")
+        if PlannerToolName.MATCH_BUILDING_FOOTPRINTS in tools and self.user_intent != QueryIntent.BUILDING_TEMPORAL_CHANGE:
+            raise ValueError("match_building_footprints is only valid for building_temporal_change")
 
         if PlannerToolName.ANALYZE_SEMANTICS in tools and PlannerToolName.DETECT_CHANGE not in tools:
             raise ValueError("analyze_semantics requires detect_change")

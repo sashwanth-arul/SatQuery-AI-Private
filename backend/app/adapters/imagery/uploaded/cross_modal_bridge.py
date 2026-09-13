@@ -16,13 +16,44 @@ from app.schemas.domain import (
 from app.schemas.input import ImageInput
 
 
+def _ensure_epsg4326_bounds(bounds: list[float] | None, crs: str | None) -> list[float] | None:
+    if not bounds:
+        return None
+    west, south, east, north = bounds
+    if (
+        -180.0 <= min(west, east)
+        and max(west, east) <= 180.0
+        and -90.0 <= min(south, north)
+        and max(south, north) <= 90.0
+    ):
+        return [min(west, east), min(south, north), max(west, east), max(south, north)]
+    if crs and crs != "EPSG:4326":
+        try:
+            from rasterio.warp import transform_bounds
+
+            w_left, w_bottom, w_right, w_top = transform_bounds(
+                crs, "EPSG:4326", west, south, east, north
+            )
+            return [
+                min(float(w_left), float(w_right)),
+                min(float(w_bottom), float(w_top)),
+                max(float(w_left), float(w_right)),
+                max(float(w_bottom), float(w_top)),
+            ]
+        except Exception:
+            pass
+    return bounds
+
+
 def pair_bounds(optical: ImageInput, sar: ImageInput) -> list[float]:
-    if optical.bounds and sar.bounds:
-        return _intersection_bounds(optical.bounds, sar.bounds)
-    if optical.bounds:
-        return optical.bounds
-    if sar.bounds:
-        return sar.bounds
+    opt_b = _ensure_epsg4326_bounds(optical.bounds, optical.crs)
+    sar_b = _ensure_epsg4326_bounds(sar.bounds, sar.crs)
+    if opt_b and sar_b:
+        return _intersection_bounds(opt_b, sar_b)
+    if opt_b:
+        return opt_b
+    if sar_b:
+        return sar_b
     if optical.benchmark_dataset and sar.benchmark_dataset:
         # Benchmark JPEG/PNG without georeferencing — development-only neutral extent.
         return [0.0, 0.0, 0.01, 0.01]

@@ -16,23 +16,23 @@ class UploadedSARAnalysisTool:
     async def execute(self, payload: SARAnalysisInput) -> ModalityAnalysisSummary:
         bounds = payload.bounds
         digest = hashlib.sha256(f"sar:{payload.sar_image_id}:{payload.query}".encode()).hexdigest()[:8]
-        aoi = aoi_from_bounds(bounds)
-        ring = aoi.geometry.coordinates[0]
-        west, south = ring[0][0], ring[0][1]
-        east, north = ring[2][0], ring[2][1]
+        west = min(bounds[0], bounds[2])
+        south = min(bounds[1], bounds[3])
+        east = max(bounds[0], bounds[2])
+        north = max(bounds[1], bounds[3])
         cx = (west + east) / 2
         cy = (south + north) / 2
-        w = (east - west) * 0.2
-        h = (north - south) * 0.2
+        w = max((east - west) * 0.2, 0.0001)
+        h = max((north - south) * 0.2, 0.0001)
         rough_poly = GeoJSONGeometry(
             type="Polygon",
             coordinates=[
                 [
-                    [cx + w * 0.2, cy - h / 2],
-                    [cx + w * 1.2, cy - h / 2],
-                    [cx + w * 1.2, cy + h / 2],
-                    [cx + w * 0.2, cy + h / 2],
-                    [cx + w * 0.2, cy - h / 2],
+                    [round(cx + w * 0.2, 6), round(cy - h / 2, 6)],
+                    [round(cx + w * 1.2, 6), round(cy - h / 2, 6)],
+                    [round(cx + w * 1.2, 6), round(cy + h / 2, 6)],
+                    [round(cx + w * 0.2, 6), round(cy + h / 2, 6)],
+                    [round(cx + w * 0.2, 6), round(cy - h / 2, 6)],
                 ]
             ],
         )
@@ -40,11 +40,11 @@ class UploadedSARAnalysisTool:
             type="Polygon",
             coordinates=[
                 [
-                    [cx - w, cy - h / 2],
-                    [cx, cy - h / 2],
-                    [cx, cy + h / 2],
-                    [cx - w, cy + h / 2],
-                    [cx - w, cy - h / 2],
+                    [round(cx - w, 6), round(cy - h / 2, 6)],
+                    [round(cx, 6), round(cy - h / 2, 6)],
+                    [round(cx, 6), round(cy + h / 2, 6)],
+                    [round(cx - w, 6), round(cy + h / 2, 6)],
+                    [round(cx - w, 6), round(cy - h / 2, 6)],
                 ]
             ],
         )

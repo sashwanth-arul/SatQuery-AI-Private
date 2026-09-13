@@ -36,6 +36,26 @@ async def post_fetch_imagery(request: ImageryRequest) -> ApiResponse[ImageryResu
     return success(output.result)
 
 
+import re
+
+def extract_acquisition_datetime_from_filename(filename: str) -> datetime | None:
+    if not filename:
+        return None
+    m = re.search(r"(?:^|[\W_])(\d{4}-\d{2}-\d{2})(?:[\W_]|$)", filename)
+    if m:
+        try:
+            return datetime.fromisoformat(f"{m.group(1)}T00:00:00+00:00")
+        except ValueError:
+            pass
+    m2 = re.search(r"S2[AB]_MSIL[12][AC]_(\d{4})(\d{2})(\d{2})T", filename)
+    if m2:
+        try:
+            return datetime.fromisoformat(f"{m2.group(1)}-{m2.group(2)}-{m2.group(3)}T00:00:00+00:00")
+        except ValueError:
+            pass
+    return None
+
+
 @router.post("/upload", response_model=ApiResponse[UploadImageResponse])
 async def post_upload_imagery(
     file: UploadFile = File(...),
@@ -72,6 +92,19 @@ async def post_upload_imagery(
                 message="acquisition_datetime must be ISO-8601 format.",
                 status_code=400,
             ) from exc
+
+    extracted_datetime = extract_acquisition_datetime_from_filename(file.filename)
+    if extracted_datetime:
+        if not parsed_acquisition:
+            parsed_acquisition = extracted_datetime
+        else:
+            default_pair_dates = {"2023-01-01", "2024-01-01"}
+            if (
+                parsed_acquisition.strftime("%Y-%m-%d") in default_pair_dates
+                and parsed_acquisition.strftime("%Y-%m-%d") != extracted_datetime.strftime("%Y-%m-%d")
+            ):
+                parsed_acquisition = extracted_datetime
+
     image = provider.ingest_upload(
         stream=stream,
         original_filename=file.filename,

@@ -153,4 +153,7 @@ def build_image_input(
         acquisition_datetime=acquisition_datetime,
         co_registered_benchmark=co_registered_benchmark,
         benchmark_pair_id=benchmark_pair_id,
+        transform=probe.transform,
+        native_crs=probe.native_crs,
+        native_bounds=probe.native_bounds,
     )

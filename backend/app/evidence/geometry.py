@@ -99,3 +99,61 @@ def overlap_fraction_of_child(parent_ring: list[list[float]], child_ring: list[l
 
 def polygon_area_km2(ring: list[list[float]]) -> float:
     return round(_ring_area_m2(ring) / 1_000_000.0, 6)
+
+
+def pixel_to_wgs84(
+    col: float,
+    row: float,
+    *,
+    transform: Any,
+    crs: Any = None,
+) -> tuple[float, float]:
+    """Convert pixel (col, row) -> native raster CRS -> EPSG:4326 (lon, lat)."""
+    import rasterio.transform
+    from rasterio.crs import CRS
+    from rasterio.warp import transform as warp_transform
+
+    if isinstance(transform, (list, tuple)) and len(transform) >= 6:
+        from rasterio import Affine
+
+        t = Affine(*transform[:6])
+    else:
+        t = transform
+
+    x, y = rasterio.transform.xy(t, row, col, offset="center")
+    if crs is None:
+        return (float(x), float(y))
+
+    crs_obj = CRS.from_user_input(crs) if not isinstance(crs, CRS) else crs
+    if crs_obj.to_epsg() == 4326 or getattr(crs_obj, "is_geographic", False):
+        return (float(x), float(y))
+
+    xs, ys = warp_transform(crs_obj, "EPSG:4326", [x], [y])
+    return (float(xs[0]), float(ys[0]))
+
+
+def pixel_polygon_to_wgs84(
+    pixel_coords: list[tuple[float, float]] | list[list[float]],
+    *,
+    transform: Any,
+    crs: Any = None,
+) -> list[list[float]]:
+    """Convert a sequence of pixel (col, row) coordinates to EPSG:4326 [[lon, lat], ...]."""
+    ring: list[list[float]] = []
+    for p in pixel_coords:
+        lon, lat = pixel_to_wgs84(float(p[0]), float(p[1]), transform=transform, crs=crs)
+        ring.append([round(lon, 6), round(lat, 6)])
+    if ring and ring[0] != ring[-1]:
+        ring.append([ring[0][0], ring[0][1]])
+    return ring
+
+
+def ensure_ring_closed(coords: list[list[float]] | list[tuple[float, float]]) -> list[list[float]]:
+    """Ensure a coordinate ring has matching first and last points."""
+    if not coords:
+        return []
+    res = [[float(c[0]), float(c[1])] for c in coords]
+    if len(res) > 0 and (res[0][0] != res[-1][0] or res[0][1] != res[-1][1]):
+        res.append([res[0][0], res[0][1]])
+    return res
+

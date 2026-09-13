@@ -24,12 +24,16 @@ def build_cross_modal_result(
     optical_image_id: str,
     sar_image_id: str,
     fused_regions_count: int,
+    debug_geospatial: dict | None = None,
 ) -> CrossModalOpticalSARResult:
     notes = " ".join(fused.complementary_notes[:3])
     answer = (
         f"{fused.summary} Optical: {optical.summary} SAR: {sar.summary} "
         f"Joint notes: {notes}".strip()
     )
+    inference_meta: dict = {"fused_region_count": fused_regions_count}
+    if debug_geospatial:
+        inference_meta["debug_geospatial"] = debug_geospatial
     return CrossModalOpticalSARResult(
         task=CrossModalTask.CROSS_MODAL_OPTICAL_SAR,
         answer=answer,
@@ -45,7 +49,7 @@ def build_cross_modal_result(
         provenance="Development uploaded cross-modal optical+SAR pipeline",
         confidence=None,
         confidence_available=False,
-        inference_metadata={"fused_region_count": fused_regions_count},
+        inference_metadata=inference_meta,
     )
 
 

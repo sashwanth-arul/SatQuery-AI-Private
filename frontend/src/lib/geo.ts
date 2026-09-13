@@ -67,11 +67,20 @@ export function getAccentColor(): string {
 export function claimTypeColor(claimType: string | undefined): string {
   switch (claimType) {
     case "urban_expansion_candidate":
+    case "built_up_change":
       return "#e07b39";
     case "vegetation_loss_candidate":
-      return "#3d8b5f";
+    case "vegetation_loss":
+      return "#b45309";
+    case "vegetation_gain_candidate":
+    case "vegetation_gain":
+      return "#16a34a";
     case "water_shrinkage_candidate":
-      return "#3b82c4";
+    case "water_loss":
+      return "#0284c7";
+    case "water_expansion_candidate":
+    case "water_gain":
+      return "#06b6d4";
     case "infrastructure_change_candidate":
       return "#9b7bd4";
     case "mining_change_candidate":
@@ -79,6 +88,18 @@ export function claimTypeColor(claimType: string | undefined): string {
     case "construction_candidate":
     case "new_built_area":
       return getAccentColor();
+    case "new_building":
+      return "#10b981";
+    case "demolished_building":
+      return "#ef4444";
+    case "modified_building":
+      return "#f59e0b";
+    case "unchanged_building":
+      return "#64748b";
+    case "building_footprint":
+      return "#06b6d4";
+    case "grounded_target":
+      return "#ec4899";
     default:
       return getAccentColor();
   }
@@ -88,10 +109,20 @@ export function claimTypeLabel(claimType: string | undefined): string | null {
   switch (claimType) {
     case "urban_expansion_candidate":
       return "Urban expansion candidate";
+    case "built_up_change":
+      return "Built-up change";
     case "vegetation_loss_candidate":
+    case "vegetation_loss":
       return "Vegetation loss candidate";
+    case "vegetation_gain_candidate":
+    case "vegetation_gain":
+      return "Vegetation gain candidate";
     case "water_shrinkage_candidate":
+    case "water_loss":
       return "Water shrinkage candidate";
+    case "water_expansion_candidate":
+    case "water_gain":
+      return "Water expansion candidate";
     case "infrastructure_change_candidate":
       return "Infrastructure change candidate";
     case "mining_change_candidate":
@@ -100,6 +131,18 @@ export function claimTypeLabel(claimType: string | undefined): string | null {
       return "Construction candidate";
     case "new_built_area":
       return "New built area";
+    case "new_building":
+      return "New building";
+    case "demolished_building":
+      return "Demolished / removed building";
+    case "modified_building":
+      return "Modified building";
+    case "unchanged_building":
+      return "Unchanged building";
+    case "building_footprint":
+      return "Building footprint";
+    case "grounded_target":
+      return "Grounded target";
     default:
       return null;
   }

@@ -131,6 +131,22 @@ def validate_bi_temporal(
     earlier = _resolve_image(earlier)
     later = _resolve_image(later)
 
+    if earlier.modality != later.modality:
+        checks.append(
+            InputValidationCheck(
+                check="modality",
+                status=InputCheckStatus.FAIL,
+                message=(
+                    f"Mismatched modalities: earlier is {earlier.modality.value}, later is {later.modality.value}. "
+                    "Bi-temporal change analysis requires matching modalities. For optical and SAR comparison, use Cross-Modal mode."
+                ),
+            )
+        )
+        errors.append(
+            f"Invalid modality pair: cannot compare {earlier.modality.value} with {later.modality.value} in temporal mode. "
+            "Please use Cross-Modal analysis for optical + SAR pairs."
+        )
+
     if earlier.modality == ImageModality.SAR or later.modality == ImageModality.SAR:
         checks.append(
             InputValidationCheck(
@@ -397,13 +413,21 @@ def planner_context_from_input(
         return PlannerInputContext(
             input_type=AnalysisInputType.SINGLE_IMAGE,
             modalities=[payload.image.modality],
-            available_tools=["geochat_vqa"],
+            available_tools=["geochat_vqa", "geochat_caption", "count_buildings", "ground_objects"],
         )
     if isinstance(payload, BiTemporalAnalysisInput):
         return PlannerInputContext(
             input_type=AnalysisInputType.BI_TEMPORAL,
             modalities=[payload.earlier.modality, payload.later.modality],
-            available_tools=["detect_change", "change_understanding", "generate_evidence"],
+            available_tools=[
+                "detect_change",
+                "change_understanding",
+                "match_building_footprints",
+                "analyze_built_up",
+                "analyze_water",
+                "analyze_vegetation",
+                "generate_evidence",
+            ],
         )
     return PlannerInputContext(
         input_type=AnalysisInputType.OPTICAL_SAR_PAIR,

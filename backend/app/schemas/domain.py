@@ -9,6 +9,7 @@ from pydantic import BaseModel, Field, field_validator, model_validator
 from app.schemas.vqa import SingleImageCaptionResult, SingleImageVQAResult
 from app.schemas.bi_temporal_change import BiTemporalChangeResult
 from app.schemas.imagery_policy import ImageryPolicyReport
+from app.schemas.common import EvidenceRegion, GeoJSONGeometry, Metric
 
 class SensorType(str, Enum):
     SENTINEL_2 = "sentinel-2"
@@ -34,16 +35,6 @@ class TraceStatus(str, Enum):
     FAILED = "failed"
 
 
-class GeoJSONGeometry(BaseModel):
-    type: Literal["Polygon", "MultiPolygon", "Point", "LineString"]
-    coordinates: list[Any]
-
-    @field_validator("coordinates")
-    @classmethod
-    def coordinates_not_empty(cls, v: list[Any]) -> list[Any]:
-        if not v:
-            raise ValueError("geometry coordinates must not be empty")
-        return v
 
 
 class AOI(BaseModel):
@@ -209,21 +200,6 @@ class QueryRequest(BaseModel):
         return self
 
 
-class Metric(BaseModel):
-    name: str
-    value: float | int | str
-    unit: str | None = None
-    source: str
-
-
-class EvidenceRegion(BaseModel):
-    id: str
-    geometry: GeoJSONGeometry
-    type: str = "change"
-    confidence: float = Field(ge=0, le=1)
-    metrics: list[Metric] = Field(default_factory=list)
-    source: str
-    metadata: dict[str, Any] = Field(default_factory=dict)
 
 
 class TraceStep(BaseModel):
@@ -257,6 +233,9 @@ class AnalysisResult(BaseModel):
     bi_temporal_change: BiTemporalChangeResult | None = None
     cross_modal: "CrossModalOpticalSARResult | None" = None
     imagery_policy: ImageryPolicyReport | None = None
+    building_detection: "BuildingDetectionResult | None" = None
+    building_temporal_change: "BuildingTemporalMatchResult | None" = None
+    surface_area_change: "SurfaceAreaChangeResult | None" = None
 
 
 class ChangeDetectionInput(BaseModel):
@@ -352,5 +331,7 @@ class SemanticAnalysisOutput(BaseModel):
 
 
 from app.schemas.cross_modal import CrossModalOpticalSARResult  # noqa: E402
+from app.schemas.building_analysis import BuildingDetectionResult, BuildingTemporalMatchResult  # noqa: E402
+from app.schemas.surface_change import SurfaceAreaChangeResult  # noqa: E402
 
 AnalysisResult.model_rebuild()

@@ -1,5 +1,13 @@
 import { describe, expect, it } from "vitest";
-import { aoiFromBbox, bboxFromAoi, confidenceBand, detectionFillOpacity, normalizeBbox } from "@/lib/geo";
+import {
+  aoiFromBbox,
+  bboxFromAoi,
+  claimTypeColor,
+  claimTypeLabel,
+  confidenceBand,
+  detectionFillOpacity,
+  normalizeBbox,
+} from "@/lib/geo";
 
 describe("geo helpers", () => {
   it("maps confidence to band labels", () => {
@@ -24,5 +32,21 @@ describe("geo helpers", () => {
     expect(bboxFromAoi(forward)).toEqual(bboxFromAoi(reverse));
     const ring = forward.geometry.coordinates[0] as number[][];
     expect(ring[0]).toEqual(ring[ring.length - 1]);
+  });
+
+  it("assigns appropriate colors and labels to SIH 26167 specialist claim types", () => {
+    expect(claimTypeColor("new_building")).toBe("#10b981");
+    expect(claimTypeColor("demolished_building")).toBe("#ef4444");
+    expect(claimTypeColor("modified_building")).toBe("#f59e0b");
+    expect(claimTypeColor("unchanged_building")).toBe("#64748b");
+    expect(claimTypeColor("water_gain")).toBe("#06b6d4");
+    expect(claimTypeColor("vegetation_loss")).toBe("#b45309");
+
+    expect(claimTypeLabel("new_building")).toBe("New building");
+    expect(claimTypeLabel("demolished_building")).toBe("Demolished / removed building");
+    expect(claimTypeLabel("modified_building")).toBe("Modified building");
+    expect(claimTypeLabel("unchanged_building")).toBe("Unchanged building");
+    expect(claimTypeLabel("water_gain")).toBe("Water expansion candidate");
+    expect(claimTypeLabel("vegetation_loss")).toBe("Vegetation loss candidate");
   });
 });

@@ -46,6 +46,45 @@ def write_geotiff(
     tifffile.imwrite(path, data, extratags=extratags)
 
 
+def write_utm_geotiff(
+    path: Path,
+    *,
+    width: int = 64,
+    height: int = 64,
+    origin_x: float = 422000.0,
+    origin_y: float = 1446000.0,
+    pixel_size: float = 10.0,
+    epsg: int = 32644,
+    bands: int = 3,
+) -> None:
+    """Multiband or single-band projected UTM GeoTIFF written via rasterio."""
+    import rasterio
+    from rasterio.crs import CRS
+    from rasterio.transform import from_origin
+
+    path.parent.mkdir(parents=True, exist_ok=True)
+    if bands == 1:
+        data = np.zeros((1, height, width), dtype=np.uint16)
+    else:
+        data = np.zeros((bands, height, width), dtype=np.uint16)
+        for b in range(bands):
+            data[b, :, :] = (b + 1) * 1000
+
+    transform = from_origin(origin_x, origin_y, pixel_size, pixel_size)
+    with rasterio.open(
+        path,
+        "w",
+        driver="GTiff",
+        height=height,
+        width=width,
+        count=bands,
+        dtype="uint16",
+        crs=CRS.from_epsg(epsg),
+        transform=transform,
+    ) as dst:
+        dst.write(data)
+
+
 def _make_optical_array(
     *,
     width: int,

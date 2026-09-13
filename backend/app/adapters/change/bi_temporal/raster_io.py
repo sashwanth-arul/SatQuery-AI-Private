@@ -42,6 +42,17 @@ class RasterData:
     def transform(self):
         return self.meta.get("transform")
 
+    @property
+    def data(self) -> np.ndarray:
+        return self.array
+
+    @property
+    def bounds(self):
+        from rasterio.transform import array_bounds
+        from rasterio.coords import BoundingBox
+        w, s, e, n = array_bounds(self.height, self.width, self.transform)
+        return BoundingBox(w, s, e, n)
+
 
 from app.core.errors import SatQueryError
 

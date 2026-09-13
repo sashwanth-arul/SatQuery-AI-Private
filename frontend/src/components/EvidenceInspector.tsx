@@ -191,8 +191,155 @@ export function EvidenceInspector({
               No significant change in this AOI for the selected dates. Widen the date range or AOI.
             </p>
           ) : null}
-          {!result.vqa && !result.caption && !result.bi_temporal_change && !result.cross_modal ? (
+          {!result.vqa &&
+          !result.caption &&
+          !result.bi_temporal_change &&
+          !result.cross_modal &&
+          !result.building_detection &&
+          !result.building_temporal_change &&
+          !result.surface_area_change ? (
             <CatalogProvenance result={result} />
+          ) : null}
+          {result.building_detection ? (
+            <div className="inspector-building-detection-meta" data-testid="inspector-building-detection">
+              <p className="inspector-section__label" style={{ marginTop: 12 }}>
+                Building Detection (Specialist Tool)
+              </p>
+              <div className="flex items-baseline gap-2 mb-2">
+                <span className="text-2xl font-bold text-[var(--accent)]" data-testid="inspector-building-count">
+                  {result.building_detection.count}
+                </span>
+                <span className="text-xs text-[var(--text-muted)]">buildings detected</span>
+              </div>
+              <dl className="m-0">
+                <div className="inspector-metric-row">
+                  <dt>Total footprint area</dt>
+                  <dd>{Math.round(result.building_detection.total_area_m2).toLocaleString()} m²</dd>
+                </div>
+                {result.building_detection.count > 0 ? (
+                  <div className="inspector-metric-row">
+                    <dt>Average footprint</dt>
+                    <dd>
+                      {Math.round(
+                        result.building_detection.total_area_m2 / result.building_detection.count,
+                      ).toLocaleString()}{" "}
+                      m²
+                    </dd>
+                  </div>
+                ) : null}
+                <div className="inspector-metric-row">
+                  <dt>Detector</dt>
+                  <dd>{result.building_detection.detector_name}</dd>
+                </div>
+                <div className="inspector-metric-row">
+                  <dt>Confidence</dt>
+                  <dd>{Math.round(result.building_detection.confidence * 100)}%</dd>
+                </div>
+                <div className="inspector-metric-row">
+                  <dt>Pipeline</dt>
+                  <dd>Deterministic CV (SIH 26167)</dd>
+                </div>
+              </dl>
+            </div>
+          ) : null}
+          {result.building_temporal_change ? (
+            <div className="inspector-building-temporal-meta" data-testid="inspector-building-temporal">
+              <p className="inspector-section__label" style={{ marginTop: 12 }}>
+                Building Temporal Change (Bipartite Matching)
+              </p>
+              <div className="grid grid-cols-2 gap-2 my-2">
+                <div className="rounded border border-[var(--border)] p-2 bg-[var(--surface-sunken)]">
+                  <div className="text-[11px] text-[var(--text-muted)]">T1 Before</div>
+                  <div className="text-lg font-semibold">{result.building_temporal_change.before_count}</div>
+                </div>
+                <div className="rounded border border-[var(--border)] p-2 bg-[var(--surface-sunken)]">
+                  <div className="text-[11px] text-[var(--text-muted)]">T2 After</div>
+                  <div className="text-lg font-semibold">{result.building_temporal_change.after_count}</div>
+                </div>
+                <div className="rounded border border-emerald-500/30 p-2 bg-emerald-500/5">
+                  <div className="text-[11px] text-emerald-600 dark:text-emerald-400 font-medium">New Buildings</div>
+                  <div className="text-lg font-semibold text-emerald-600 dark:text-emerald-400" data-testid="inspector-new-buildings-count">
+                    +{result.building_temporal_change.new_count}
+                  </div>
+                </div>
+                <div className="rounded border border-rose-500/30 p-2 bg-rose-500/5">
+                  <div className="text-[11px] text-rose-600 dark:text-rose-400 font-medium">Demolished / Removed</div>
+                  <div className="text-lg font-semibold text-rose-600 dark:text-rose-400" data-testid="inspector-removed-buildings-count">
+                    -{result.building_temporal_change.removed_count}
+                  </div>
+                </div>
+              </div>
+              <dl className="m-0">
+                <div className="inspector-metric-row">
+                  <dt>Unchanged buildings</dt>
+                  <dd>{result.building_temporal_change.unchanged_count}</dd>
+                </div>
+                <div className="inspector-metric-row">
+                  <dt>Significantly changed</dt>
+                  <dd>{result.building_temporal_change.changed_count}</dd>
+                </div>
+                <div className="inspector-metric-row">
+                  <dt>Matching policy</dt>
+                  <dd>{result.building_temporal_change.matcher_name}</dd>
+                </div>
+                <div className="inspector-metric-row">
+                  <dt>Confidence</dt>
+                  <dd>{Math.round(result.building_temporal_change.confidence * 100)}%</dd>
+                </div>
+              </dl>
+            </div>
+          ) : null}
+          {result.surface_area_change ? (
+            <div className="inspector-surface-area-meta" data-testid="inspector-surface-area">
+              <p className="inspector-section__label" style={{ marginTop: 12 }}>
+                {result.surface_area_change.domain === "built_up"
+                  ? "Built-Up Area"
+                  : result.surface_area_change.domain === "water"
+                  ? "Water Body"
+                  : "Vegetation"}{" "}
+                Change Analysis
+              </p>
+              <div className="my-2 p-2 rounded border border-[var(--border)] bg-[var(--surface-sunken)]">
+                <div className="flex items-baseline justify-between">
+                  <span className="text-xs text-[var(--text-muted)]">Net Difference</span>
+                  <span
+                    className={`text-base font-bold ${
+                      result.surface_area_change.difference_m2 >= 0
+                        ? "text-emerald-500"
+                        : "text-rose-500"
+                    }`}
+                    data-testid="inspector-surface-diff"
+                  >
+                    {result.surface_area_change.difference_m2 >= 0 ? "+" : ""}
+                    {Math.round(result.surface_area_change.difference_m2).toLocaleString()} m² (
+                    {result.surface_area_change.percentage_change >= 0 ? "+" : ""}
+                    {result.surface_area_change.percentage_change}%)
+                  </span>
+                </div>
+              </div>
+              <dl className="m-0">
+                <div className="inspector-metric-row">
+                  <dt>T1 Before area</dt>
+                  <dd>{Math.round(result.surface_area_change.before_area_m2).toLocaleString()} m²</dd>
+                </div>
+                <div className="inspector-metric-row">
+                  <dt>T2 After area</dt>
+                  <dd>{Math.round(result.surface_area_change.after_area_m2).toLocaleString()} m²</dd>
+                </div>
+                <div className="inspector-metric-row">
+                  <dt>Spectral index</dt>
+                  <dd>{result.surface_area_change.primary_index.toUpperCase()}</dd>
+                </div>
+                <div className="inspector-metric-row">
+                  <dt>Confidence</dt>
+                  <dd>{Math.round(result.surface_area_change.confidence * 100)}%</dd>
+                </div>
+                <div className="inspector-metric-row">
+                  <dt>Vector regions</dt>
+                  <dd>{result.surface_area_change.evidence_regions.length}</dd>
+                </div>
+              </dl>
+            </div>
           ) : null}
           {result.cross_modal ? (
             <div className="inspector-crossmodal-meta" data-testid="inspector-crossmodal-provenance">
@@ -241,7 +388,9 @@ export function EvidenceInspector({
               </dl>
             </div>
           ) : null}
-          {result.bi_temporal_change ? (
+          {result.bi_temporal_change &&
+          !result.building_temporal_change &&
+          !result.surface_area_change ? (
             <div className="inspector-bitemporal-meta" data-testid="inspector-bitemporal-provenance">
               <p className="inspector-section__label" style={{ marginTop: 12 }}>
                 Change analysis

@@ -18,6 +18,12 @@ TOOL_DESCRIPTIONS: dict[PlannerToolName, str] = {
     PlannerToolName.OPTICAL_ANALYSIS: "Analyze uploaded optical/multispectral imagery for cross-modal cues.",
     PlannerToolName.SAR_ANALYSIS: "Analyze uploaded SAR imagery for cross-modal cues.",
     PlannerToolName.CROSS_MODAL_FUSION: "Fuse uploaded optical and SAR analyses into joint evidence.",
+    PlannerToolName.DETECT_BUILDINGS: "Detect and count individual building footprints with georeferenced polygons.",
+    PlannerToolName.MATCH_BUILDING_FOOTPRINTS: "Spatially match before/after building footprints to classify new, removed, and changed buildings.",
+    PlannerToolName.ANALYZE_BUILT_UP: "Compute built-up surface area changes and expansion/contraction in m².",
+    PlannerToolName.ANALYZE_WATER_CHANGE: "Compute water body surface area changes and shrinkage/expansion in m² using NDWI.",
+    PlannerToolName.ANALYZE_VEGETATION_CHANGE: "Compute vegetation canopy area changes and loss/gain in m² using NDVI.",
+    PlannerToolName.GROUND_OBJECTS: "Spatially localize and ground objects as bounding boxes and polygons.",
 }
 
 
