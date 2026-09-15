@@ -2,7 +2,7 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
-from app.api.routes import analysis, health, imagery, query
+from app.api.routes import analysis, geovision, health, imagery, query
 from app.core.config import get_settings
 from app.core.errors import SatQueryError
 
@@ -22,6 +22,7 @@ app.include_router(health.router)
 app.include_router(imagery.router, prefix=settings.api_prefix)
 app.include_router(query.router, prefix=settings.api_prefix)
 app.include_router(analysis.router, prefix=settings.api_prefix)
+app.include_router(geovision.router, prefix=settings.api_prefix)
 
 
 import logging

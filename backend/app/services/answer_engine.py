@@ -408,3 +408,99 @@ class AnswerEngine:
             f"{len(result.evidence_regions)} mapped change vector polygon{'s' if len(result.evidence_regions) != 1 else ''} "
             f"are available in the evidence inspector."
         )
+
+    def compose_water_detection(
+        self,
+        request: QueryRequest,
+        stats: dict[str, Any],
+    ) -> str:
+        pct = round(stats.get("confidence", 0.92) * 100)
+        return (
+            f"Water resource assessment (NDWI spectral heuristic): "
+            f"Detected {stats.get('water_body_count', 0)} surface water body polygon(s) "
+            f"covering {stats.get('water_area_m2', 0.0):,.1f} m² "
+            f"({stats.get('water_percentage', 0.0):.2f}% of observed area, detector confidence {pct}%). "
+            f"Water boundaries are georeferenced and available in the evidence overlay."
+        )
+
+    def compose_vegetation_analysis(
+        self,
+        request: QueryRequest,
+        stats: dict[str, Any],
+    ) -> str:
+        pct = round(stats.get("confidence", 0.90) * 100)
+        mode = stats.get("mode", "general")
+        if mode == "forest":
+            return (
+                f"Forest monitoring analysis (NDVI > 0.55 dense canopy heuristic): "
+                f"Dense forest cover spans {stats.get('forest_area_m2', 0.0):,.1f} m² "
+                f"({stats.get('forest_percentage', 0.0):.2f}% of total area, confidence {pct}%). "
+                f"{stats.get('region_count', 0)} canopy tract(s) are mapped with an evidence overlay."
+            )
+        if mode == "agriculture":
+            return (
+                f"Agricultural monitoring analysis (0.22 ≤ NDVI ≤ 0.55 crop/vegetation heuristic): "
+                f"Active agricultural parcels span {stats.get('agricultural_area_m2', 0.0):,.1f} m² "
+                f"({stats.get('agricultural_percentage', 0.0):.2f}% of total area, confidence {pct}%). "
+                f"{stats.get('region_count', 0)} field parcel(s) are mapped with an evidence overlay."
+            )
+        return (
+            f"Vegetation condition assessment (NDVI spectral index heuristic): "
+            f"Total vegetation canopy covers {stats.get('total_vegetation_area_m2', 0.0):,.1f} m² "
+            f"({stats.get('total_vegetation_percentage', 0.0):.2f}% coverage, confidence {pct}%). "
+            f"Dense forest: {stats.get('forest_area_m2', 0.0):,.1f} m² ({stats.get('forest_percentage', 0.0):.1f}%), "
+            f"Agricultural/general vegetation: {stats.get('agricultural_area_m2', 0.0):,.1f} m² ({stats.get('agricultural_percentage', 0.0):.1f}%)."
+        )
+
+    def compose_flood_analysis(
+        self,
+        request: QueryRequest,
+        stats: dict[str, Any],
+    ) -> str:
+        pct = round(stats.get("confidence", 0.91) * 100)
+        if stats.get("task") == "temporal_flood_change":
+            net_sign = "+" if stats.get("net_flood_change_m2", 0) > 0 else ""
+            return (
+                f"Disaster management flood inundation assessment (NDWI / SAR change heuristic): "
+                f"Identified {stats.get('newly_flooded_area_m2', 0.0):,.1f} m² of newly inundated land, "
+                f"with {stats.get('receded_area_m2', 0.0):,.1f} m² of receded water "
+                f"(net water surface change: {net_sign}{stats.get('net_flood_change_m2', 0.0):,.1f} m², confidence {pct}%). "
+                f"{stats.get('inundation_zone_count', 0)} flood zone polygon(s) and dual-layer overlay are mapped."
+            )
+        return (
+            f"Disaster management flood extent assessment (NDWI / SAR inundation heuristic): "
+            f"Detected {stats.get('zone_count', 0)} flooded/inundated zone(s) "
+            f"spanning {stats.get('flood_area_m2', 0.0):,.1f} m² "
+            f"({stats.get('flood_percentage', 0.0):.2f}% of observed area, confidence {pct}%). "
+            f"Inundation masks and vector regions are displayed in the evidence inspector."
+        )
+
+    def compose_land_cover_analysis(
+        self,
+        request: QueryRequest,
+        stats: dict[str, Any],
+    ) -> str:
+        pct = round(stats.get("confidence", 0.88) * 100)
+        return (
+            f"Environmental land cover classification (multi-spectral NDVI/NDWI/NDBI heuristics): "
+            f"Total mapped area: {stats.get('total_area_m2', 0.0):,.1f} m² (confidence {pct}%). "
+            f"Class distribution — "
+            f"Water: {stats.get('water_percentage', 0.0):.1f}% ({stats.get('water_m2', 0.0):,.0f} m²), "
+            f"Dense Forest: {stats.get('forest_percentage', 0.0):.1f}% ({stats.get('forest_m2', 0.0):,.0f} m²), "
+            f"Agriculture/Vegetation: {stats.get('agricultural_percentage', 0.0):.1f}% ({stats.get('agricultural_m2', 0.0):,.0f} m²), "
+            f"Built-up / Urban: {stats.get('built_up_percentage', 0.0):.1f}% ({stats.get('built_up_m2', 0.0):,.0f} m²), "
+            f"Bare / Other: {stats.get('bare_percentage', 0.0):.1f}% ({stats.get('bare_m2', 0.0):,.0f} m²)."
+        )
+
+    def compose_infrastructure_mapping(
+        self,
+        request: QueryRequest,
+        building_result: BuildingDetectionResult,
+    ) -> str:
+        pct = round(building_result.confidence * 100)
+        return (
+            f"Infrastructure and built structural mapping (spatial gradient & morphological heuristic): "
+            f"Mapped {building_result.count} structural footprint(s) spanning a total of "
+            f"{building_result.total_area_m2:,.1f} m² (confidence {pct}%). "
+            f"Footprints are georeferenced and visualized as vector evidence and overlay masks."
+        )

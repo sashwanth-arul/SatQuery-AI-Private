@@ -9,7 +9,7 @@ export function GlobalNav() {
   const pathname = usePathname();
   const isWorkstation = pathname === "/workstation";
   const isHome = pathname === "/" || pathname === "/home";
-  const isMarketing = pathname === "/tutorial" || pathname === "/credits";
+  const isMarketing = pathname === "/tutorial";
 
   if (isHome || isWorkstation || isMarketing) {
     return null;

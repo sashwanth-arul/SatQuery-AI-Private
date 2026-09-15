@@ -15,6 +15,15 @@ const TOOL_LABELS: Record<string, string> = {
   sar_analysis: "SAR analysis",
   cross_modal_fusion: "Cross-modal fusion",
   generate_evidence: "Generate evidence",
+  select_specialist: "Select specialist",
+  geospatial_processing: "Geospatial raster processing",
+  calculate_statistics: "Calculate verified statistics",
+  grounded_answer: "Synthesize grounded answer",
+  analyze_water: "Analyze water resources",
+  analyze_vegetation: "Analyze vegetation & forestry",
+  analyze_flood: "Analyze flood disaster",
+  analyze_land_cover: "Classify multi-class land cover",
+  map_infrastructure: "Map infrastructure",
 };
 
 export function traceStepLabel(step: TraceStep): string {

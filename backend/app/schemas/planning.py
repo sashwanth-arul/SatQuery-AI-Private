@@ -26,6 +26,13 @@ class QueryIntent(str, Enum):
     SINGLE_IMAGE_CAPTION = "single_image_caption"
     BI_TEMPORAL_CHANGE_VQA = "bi_temporal_change_vqa"
     CROSS_MODAL_OPTICAL_SAR = "cross_modal_optical_sar"
+    WATER_DETECTION = "water_detection"
+    FLOOD_ANALYSIS = "flood_analysis"
+    AGRICULTURE_MONITORING = "agriculture_monitoring"
+    FOREST_MONITORING = "forest_monitoring"
+    BUILT_UP_ANALYSIS = "built_up_analysis"
+    INFRASTRUCTURE_MAPPING = "infrastructure_mapping"
+    LAND_COVER_ANALYSIS = "land_cover_analysis"
 
 
 class RequestedModality(str, Enum):
@@ -53,6 +60,11 @@ class PlannerToolName(str, Enum):
     ANALYZE_BUILT_UP = "analyze_built_up"
     ANALYZE_WATER_CHANGE = "analyze_water_change"
     ANALYZE_VEGETATION_CHANGE = "analyze_vegetation_change"
+    ANALYZE_WATER = "analyze_water"
+    ANALYZE_VEGETATION = "analyze_vegetation"
+    ANALYZE_FLOOD = "analyze_flood"
+    ANALYZE_LAND_COVER = "analyze_land_cover"
+    MAP_INFRASTRUCTURE = "map_infrastructure"
     GROUND_OBJECTS = "ground_objects"
 
 
@@ -224,6 +236,66 @@ class QueryAnalysisPlan(BaseModel):
                 raise ValueError("vegetation_change must not include catalog temporal dates")
             if self.aoi_required:
                 raise ValueError("vegetation_change must set aoi_required=False")
+            return self
+
+        if self.user_intent == QueryIntent.WATER_DETECTION:
+            expected = {PlannerToolName.ANALYZE_WATER, PlannerToolName.GENERATE_EVIDENCE}
+            if tools != expected:
+                raise ValueError("water_detection requires analyze_water and generate_evidence only")
+            if self.earlier_date is not None or self.later_date is not None:
+                raise ValueError("water_detection must not include temporal dates")
+            if self.aoi_required:
+                raise ValueError("water_detection must set aoi_required=False")
+            return self
+
+        if self.user_intent == QueryIntent.FLOOD_ANALYSIS:
+            expected = {PlannerToolName.ANALYZE_FLOOD, PlannerToolName.GENERATE_EVIDENCE}
+            if tools != expected:
+                raise ValueError("flood_analysis requires analyze_flood and generate_evidence only")
+            if self.earlier_date is not None or self.later_date is not None:
+                raise ValueError("flood_analysis must not include catalog temporal dates")
+            if self.aoi_required:
+                raise ValueError("flood_analysis must set aoi_required=False")
+            return self
+
+        if self.user_intent in (QueryIntent.AGRICULTURE_MONITORING, QueryIntent.FOREST_MONITORING):
+            expected = {PlannerToolName.ANALYZE_VEGETATION, PlannerToolName.GENERATE_EVIDENCE}
+            if tools != expected:
+                raise ValueError("vegetation monitoring requires analyze_vegetation and generate_evidence only")
+            if self.earlier_date is not None or self.later_date is not None:
+                raise ValueError("vegetation monitoring must not include temporal dates")
+            if self.aoi_required:
+                raise ValueError("vegetation monitoring must set aoi_required=False")
+            return self
+
+        if self.user_intent == QueryIntent.BUILT_UP_ANALYSIS:
+            expected = {PlannerToolName.ANALYZE_BUILT_UP, PlannerToolName.GENERATE_EVIDENCE}
+            if tools != expected:
+                raise ValueError("built_up_analysis requires analyze_built_up and generate_evidence only")
+            if self.earlier_date is not None or self.later_date is not None:
+                raise ValueError("built_up_analysis must not include temporal dates")
+            if self.aoi_required:
+                raise ValueError("built_up_analysis must set aoi_required=False")
+            return self
+
+        if self.user_intent == QueryIntent.INFRASTRUCTURE_MAPPING:
+            expected = {PlannerToolName.MAP_INFRASTRUCTURE, PlannerToolName.GENERATE_EVIDENCE}
+            if tools != expected:
+                raise ValueError("infrastructure_mapping requires map_infrastructure and generate_evidence only")
+            if self.earlier_date is not None or self.later_date is not None:
+                raise ValueError("infrastructure_mapping must not include temporal dates")
+            if self.aoi_required:
+                raise ValueError("infrastructure_mapping must set aoi_required=False")
+            return self
+
+        if self.user_intent == QueryIntent.LAND_COVER_ANALYSIS:
+            expected = {PlannerToolName.ANALYZE_LAND_COVER, PlannerToolName.GENERATE_EVIDENCE}
+            if tools != expected:
+                raise ValueError("land_cover_analysis requires analyze_land_cover and generate_evidence only")
+            if self.earlier_date is not None or self.later_date is not None:
+                raise ValueError("land_cover_analysis must not include temporal dates")
+            if self.aoi_required:
+                raise ValueError("land_cover_analysis must set aoi_required=False")
             return self
 
         if self.user_intent == QueryIntent.BUILDING_TEMPORAL_CHANGE:

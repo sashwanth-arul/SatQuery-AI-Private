@@ -5,8 +5,8 @@ import { usePathname } from "next/navigation";
 import { useCallback, useEffect, useId, useRef, useState } from "react";
 import {
   BookOpen,
+  Eye,
   FileText,
-  Heart,
   History,
   Home,
   Map as MapIcon,
@@ -19,7 +19,7 @@ const NAV_ITEMS = [
   { href: "/history", label: "Analysis History", Icon: History, testId: "site-nav-link-history" },
   { href: "/reports", label: "Reports", Icon: FileText, testId: "site-nav-link-reports" },
   { href: "/tutorial", label: "Tutorial", Icon: BookOpen, testId: "site-nav-link-tutorial" },
-  { href: "/credits", label: "Credits", Icon: Heart, testId: "site-nav-link-credits" },
+  { href: "/geovision", label: "GeoVision", Icon: Eye, testId: "site-nav-link-geovision" },
 ] as const;
 
 function isActivePath(pathname: string, href: string): boolean {

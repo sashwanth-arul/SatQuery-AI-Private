@@ -40,9 +40,6 @@ export function HomeFooter() {
             <p className="home-footer__heading">Team</p>
             <ul className="home-footer__links">
               <li>
-                <Link href="/credits">Credits</Link>
-              </li>
-              <li>
                 <a href={REPO_URL} target="_blank" rel="noopener noreferrer">
                   GitHub repo
                 </a>

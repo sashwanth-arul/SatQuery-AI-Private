@@ -453,6 +453,41 @@ export interface SurfaceAreaChangeResult {
   metadata?: Record<string, unknown>;
 }
 
+export type QueryIntent =
+  | "spectral_change"
+  | "construction"
+  | "building_temporal_change"
+  | "building_count"
+  | "built_up_area_change"
+  | "water_change"
+  | "vegetation_change"
+  | "grounding"
+  | "radar_change"
+  | "multimodal_comparison"
+  | "single_image_vqa"
+  | "single_image_caption"
+  | "bi_temporal_change_vqa"
+  | "cross_modal_optical_sar"
+  | "water_detection"
+  | "flood_analysis"
+  | "agriculture_monitoring"
+  | "forest_monitoring"
+  | "built_up_analysis"
+  | "infrastructure_mapping"
+  | "land_cover_analysis";
+
+export interface EvidenceOverlay {
+  overlay_id: string;
+  image_id: string;
+  supported_layers: string[];
+  data_uri: string;
+  width: number;
+  height: number;
+  crs: string;
+  bounds: number[];
+  statistics: Record<string, any>;
+}
+
 export interface AnalysisResult {
   status: AnalysisStatus;
   session_id: string;
@@ -464,6 +499,8 @@ export interface AnalysisResult {
   trace: TraceStep[];
   mode: DataMode;
   demonstration_data?: boolean;
+  domain?: string | null;
+  evidence_overlay?: EvidenceOverlay | null;
   vqa?: SingleImageVQAResult | null;
   caption?: SingleImageCaptionResult | null;
   bi_temporal_change?: BiTemporalChangeResult | null;

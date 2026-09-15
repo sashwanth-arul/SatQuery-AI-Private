@@ -1,0 +1,69 @@
+# SatQuery Aerial Object Taxonomy & External Dataset Label Mapping
+# Unifies VisDrone, xView, and DOTA classes into SatQuery's 9 discrete aerial classes
+
+satquery_classes:
+  - building
+  - house
+  - car
+  - truck
+  - bus
+  - motorcycle
+  - aircraft
+  - boat
+  - person
+
+# Explicitly excluded from bounding box object detection (handled via segmentation / area analysis)
+area_classes:
+  - water
+  - road
+  - vegetation
+  - forest
+  - grass
+  - sports_ground
+
+# Source dataset translation rules
+mappings:
+  visdrone:
+    pedestrian: person
+    people: person
+    bicycle: motorcycle
+    car: car
+    van: truck
+    truck: truck
+    bus: bus
+    motor: motorcycle
+    awning-tricycle: null  # dropped
+    tricycle: null        # dropped
+
+  xview:
+    Fixed-wing Aircraft: aircraft
+    Small Aircraft: aircraft
+    Passenger Vehicle: car
+    Small Car: car
+    Bus: bus
+    Pickup Truck: truck
+    Utility Truck: truck
+    Truck: truck
+    Cargo Truck: truck
+    Building: building
+    Facility: building
+    Maritime Vessel: boat
+    Motorboat: boat
+    Sailboat: boat
+
+  dota:
+    plane: aircraft
+    baseball-diamond: null # sports_ground (area class)
+    bridge: null           # road (area class)
+    ground-track-field: null # sports_ground (area class)
+    small-vehicle: car
+    large-vehicle: truck
+    ship: boat
+    tennis-court: null     # sports_ground (area class)
+    basketball-court: null # sports_ground (area class)
+    storage-tank: building
+    soccer-ball-field: null # sports_ground (area class)
+    roundabout: null       # road (area class)
+    harbor: boat
+    swimming-pool: null    # water (area class)
+    helicopter: aircraft

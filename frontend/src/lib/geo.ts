@@ -96,10 +96,20 @@ export function claimTypeColor(claimType: string | undefined): string {
       return "#f59e0b";
     case "unchanged_building":
       return "#64748b";
-    case "building_footprint":
-      return "#06b6d4";
     case "grounded_target":
       return "#ec4899";
+    case "water_body":
+      return "#0284c7";
+    case "flooded_area":
+      return "#38bdf8";
+    case "agricultural_area":
+      return "#10b981";
+    case "forest_cover":
+      return "#15803d";
+    case "infrastructure":
+      return "#a855f7";
+    case "built_up_area":
+      return "#f97316";
     default:
       return getAccentColor();
   }
@@ -143,6 +153,18 @@ export function claimTypeLabel(claimType: string | undefined): string | null {
       return "Building footprint";
     case "grounded_target":
       return "Grounded target";
+    case "water_body":
+      return "Water body (NDWI)";
+    case "flooded_area":
+      return "Flood inundation zone";
+    case "agricultural_area":
+      return "Agricultural parcel";
+    case "forest_cover":
+      return "Forest canopy";
+    case "infrastructure":
+      return "Infrastructure footprint";
+    case "built_up_area":
+      return "Built-up area";
     default:
       return null;
   }

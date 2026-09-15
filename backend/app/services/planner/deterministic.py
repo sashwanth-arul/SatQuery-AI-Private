@@ -170,6 +170,24 @@ def build_deterministic_plan(
                 planner=planner,  # type: ignore[arg-type]
             )
 
+        # Flood / inundation change
+        if bool({"flood", "flooded", "flooding", "inundation", "inundated"} & tokens):
+            return QueryAnalysisPlan(
+                user_intent=QueryIntent.FLOOD_ANALYSIS,
+                requested_modalities=[RequestedModality.OPTICAL],
+                analysis_profile=AnalysisProfileName.NONE,
+                required_tools=[
+                    PlannerToolName.ANALYZE_FLOOD,
+                    PlannerToolName.GENERATE_EVIDENCE,
+                ],
+                earlier_date=None,
+                later_date=None,
+                sensor_requirement=SensorRequirement.NOT_APPLICABLE,
+                aoi_required=False,
+                user_intent_summary="Route to uploaded bi-temporal flood inundation and disaster assessment specialist.",
+                planner=planner,  # type: ignore[arg-type]
+            )
+
         change_domain = resolve_change_domain(request.query)
         return QueryAnalysisPlan(
             user_intent=QueryIntent.BI_TEMPORAL_CHANGE_VQA,
@@ -214,6 +232,102 @@ def build_deterministic_plan(
                 sensor_requirement=SensorRequirement.NOT_APPLICABLE,
                 aoi_required=False,
                 user_intent_summary="Route to building detection and exact object counting specialist.",
+                planner=planner,  # type: ignore[arg-type]
+            )
+        if intent == QueryIntent.WATER_DETECTION:
+            return QueryAnalysisPlan(
+                user_intent=QueryIntent.WATER_DETECTION,
+                requested_modalities=requested,
+                analysis_profile=AnalysisProfileName.NONE,
+                required_tools=[
+                    PlannerToolName.ANALYZE_WATER,
+                    PlannerToolName.GENERATE_EVIDENCE,
+                ],
+                earlier_date=None,
+                later_date=None,
+                sensor_requirement=SensorRequirement.NOT_APPLICABLE,
+                aoi_required=False,
+                user_intent_summary="Route to water resource detection and surface area segmentation specialist.",
+                planner=planner,  # type: ignore[arg-type]
+            )
+        if intent == QueryIntent.FLOOD_ANALYSIS:
+            return QueryAnalysisPlan(
+                user_intent=QueryIntent.FLOOD_ANALYSIS,
+                requested_modalities=requested,
+                analysis_profile=AnalysisProfileName.NONE,
+                required_tools=[
+                    PlannerToolName.ANALYZE_FLOOD,
+                    PlannerToolName.GENERATE_EVIDENCE,
+                ],
+                earlier_date=None,
+                later_date=None,
+                sensor_requirement=SensorRequirement.NOT_APPLICABLE,
+                aoi_required=False,
+                user_intent_summary="Route to disaster management and flood inundation mapping specialist.",
+                planner=planner,  # type: ignore[arg-type]
+            )
+        if intent == QueryIntent.AGRICULTURE_MONITORING:
+            return QueryAnalysisPlan(
+                user_intent=QueryIntent.AGRICULTURE_MONITORING,
+                requested_modalities=requested,
+                analysis_profile=AnalysisProfileName.NONE,
+                required_tools=[
+                    PlannerToolName.ANALYZE_VEGETATION,
+                    PlannerToolName.GENERATE_EVIDENCE,
+                ],
+                earlier_date=None,
+                later_date=None,
+                sensor_requirement=SensorRequirement.NOT_APPLICABLE,
+                aoi_required=False,
+                user_intent_summary="Route to agricultural crop monitoring and vegetation condition specialist.",
+                planner=planner,  # type: ignore[arg-type]
+            )
+        if intent == QueryIntent.FOREST_MONITORING:
+            return QueryAnalysisPlan(
+                user_intent=QueryIntent.FOREST_MONITORING,
+                requested_modalities=requested,
+                analysis_profile=AnalysisProfileName.NONE,
+                required_tools=[
+                    PlannerToolName.ANALYZE_VEGETATION,
+                    PlannerToolName.GENERATE_EVIDENCE,
+                ],
+                earlier_date=None,
+                later_date=None,
+                sensor_requirement=SensorRequirement.NOT_APPLICABLE,
+                aoi_required=False,
+                user_intent_summary="Route to forest canopy monitoring and woodland assessment specialist.",
+                planner=planner,  # type: ignore[arg-type]
+            )
+        if intent == QueryIntent.INFRASTRUCTURE_MAPPING:
+            return QueryAnalysisPlan(
+                user_intent=QueryIntent.INFRASTRUCTURE_MAPPING,
+                requested_modalities=requested,
+                analysis_profile=AnalysisProfileName.NONE,
+                required_tools=[
+                    PlannerToolName.MAP_INFRASTRUCTURE,
+                    PlannerToolName.GENERATE_EVIDENCE,
+                ],
+                earlier_date=None,
+                later_date=None,
+                sensor_requirement=SensorRequirement.NOT_APPLICABLE,
+                aoi_required=False,
+                user_intent_summary="Route to infrastructure and built structural footprint specialist.",
+                planner=planner,  # type: ignore[arg-type]
+            )
+        if intent == QueryIntent.LAND_COVER_ANALYSIS:
+            return QueryAnalysisPlan(
+                user_intent=QueryIntent.LAND_COVER_ANALYSIS,
+                requested_modalities=requested,
+                analysis_profile=AnalysisProfileName.NONE,
+                required_tools=[
+                    PlannerToolName.ANALYZE_LAND_COVER,
+                    PlannerToolName.GENERATE_EVIDENCE,
+                ],
+                earlier_date=None,
+                later_date=None,
+                sensor_requirement=SensorRequirement.NOT_APPLICABLE,
+                aoi_required=False,
+                user_intent_summary="Route to multi-class land cover classification and environmental analysis specialist.",
                 planner=planner,  # type: ignore[arg-type]
             )
         if intent == QueryIntent.GROUNDING:

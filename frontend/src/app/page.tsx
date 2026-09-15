@@ -1,5 +1,6 @@
 import { Playfair_Display } from "next/font/google";
 import { HomeAboutSection } from "@/components/home/HomeAboutSection";
+import { HomeDomainCapabilities } from "@/components/home/HomeDomainCapabilities";
 import { HomeFooter } from "@/components/home/HomeFooter";
 import { HomeTransitionBand } from "@/components/home/HomeTransitionBand";
 import { MarketingNav } from "@/components/MarketingNav";
@@ -19,6 +20,7 @@ export default function LandingPage() {
       <ResponsiveHeroBanner primaryButtonHref="/workstation" />
       <HomeTransitionBand />
       <HomeAboutSection />
+      <HomeDomainCapabilities />
       <HomeFooter />
     </div>
   );

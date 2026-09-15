@@ -1,0 +1,31 @@
+# SatQuery Aerial Object Detection Dataset Configuration
+# Standardized YOLOv8 format for high-resolution aerial and drone imagery
+
+path: ../datasets/aerial_detection
+train: images/train
+val: images/val
+test: images/test
+
+# SatQuery 9 Discrete Physical Object Classes
+# Note: Area surfaces (water, road, vegetation) are strictly excluded from bbox detection
+names:
+  0: building
+  1: house
+  2: car
+  3: truck
+  4: bus
+  5: motorcycle
+  6: aircraft
+  7: boat
+  8: person
+
+# Metadata
+metadata:
+  benchmark_name: SatQuery-Aerial-Benchmark
+  version: 2.0
+  sources:
+    - xView (DIUx xView Detection Challenge)
+    - VisDrone (Drone-based Detection Benchmark)
+    - DOTA (Dataset for Object Detection in Aerial Images)
+  tile_resolution: 640
+  coordinate_system: pixel_original

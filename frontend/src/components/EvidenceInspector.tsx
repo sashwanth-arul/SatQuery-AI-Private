@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import type { AnalysisResult, EvidenceRegion, FetchImageryMetadata, TraceStep } from "@/types/domain";
 import { ConfidenceMeter } from "@/components/ConfidenceMeter";
 import { BeforeAfterEvidenceViewer } from "@/components/BeforeAfterEvidenceViewer";
@@ -129,6 +130,7 @@ export function EvidenceInspector({
   onClose,
   chatResetKey,
 }: Props) {
+  const [overlayModalOpen, setOverlayModalOpen] = useState(false);
   if (!result && !running && !analysisError) return null;
 
   const evidence = result?.evidence ?? [];
@@ -339,6 +341,58 @@ export function EvidenceInspector({
                   <dd>{result.surface_area_change.evidence_regions.length}</dd>
                 </div>
               </dl>
+            </div>
+          ) : null}
+          {result.evidence_overlay ? (
+            <div className="inspector-overlay-meta my-3 rounded-md border border-[var(--border)] bg-[var(--surface-sunken)] p-3" data-testid="inspector-evidence-overlay">
+              <div className="flex items-center justify-between mb-2">
+                <p className="inspector-section__label m-0 text-xs font-semibold uppercase tracking-wider text-[var(--text-muted)]">
+                  Evidence Overlay
+                </p>
+                <span className="text-[10px] px-1.5 py-0.5 rounded bg-[var(--surface)] text-[var(--accent)] font-medium border border-[var(--border)]">
+                  Raster Processing
+                </span>
+              </div>
+              <div
+                className="relative group overflow-hidden rounded border border-[var(--border)] bg-black/40 cursor-pointer"
+                onClick={() => setOverlayModalOpen(true)}
+              >
+                <img
+                  src={result.evidence_overlay.data_uri}
+                  alt="Evidence overlay preview"
+                  className="w-full h-auto object-contain max-h-48 transition-transform group-hover:scale-[1.02]"
+                />
+                <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                  <span className="text-xs text-white bg-black/75 px-2.5 py-1 rounded shadow-md font-medium">
+                    🔍 Click to expand overlay
+                  </span>
+                </div>
+              </div>
+              <div className="mt-2 flex items-center justify-between text-[11px] text-[var(--text-muted)]">
+                <span>
+                  {result.evidence_overlay.width} × {result.evidence_overlay.height} px · {result.evidence_overlay.crs}
+                </span>
+                <button
+                  type="button"
+                  className="text-xs text-[var(--accent)] hover:underline font-medium"
+                  onClick={() => setOverlayModalOpen(true)}
+                >
+                  View full size & layers ↗
+                </button>
+              </div>
+              <div className="mt-2 flex flex-wrap gap-1">
+                {result.evidence_overlay.supported_layers.map((layer) => (
+                  <span
+                    key={layer}
+                    className="text-[10px] px-1.5 py-0.5 rounded bg-[var(--surface)] border border-[var(--border)] text-[var(--text-secondary)] font-mono"
+                  >
+                    {layer}
+                  </span>
+                ))}
+              </div>
+              <p className="mt-2 text-[10px] text-[var(--text-muted)] italic leading-tight">
+                Heuristic disclosure: Thresholds (NDVI/NDWI/NDBI) are configurable heuristics from pixel mathematics and physical bands, not absolute ground truth.
+              </p>
             </div>
           ) : null}
           {result.cross_modal ? (
@@ -606,6 +660,56 @@ export function EvidenceInspector({
           selectedRegionId={selectedRegionId}
           chatResetKey={chatResetKey}
         />
+      ) : null}
+
+      {result && result.evidence_overlay && overlayModalOpen ? (
+        <div
+          role="dialog"
+          aria-modal="true"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4"
+          onClick={() => setOverlayModalOpen(false)}
+        >
+          <div
+            className="relative max-w-4xl w-full bg-[var(--surface)] border border-[var(--border)] rounded-xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between px-4 py-3 border-b border-[var(--border)]">
+              <div>
+                <h3 className="text-sm font-semibold m-0">Raster Evidence Overlay</h3>
+                <p className="text-xs text-[var(--text-muted)] m-0">
+                  {result.evidence_overlay.width} × {result.evidence_overlay.height} px · {result.evidence_overlay.crs}
+                </p>
+              </div>
+              <button
+                type="button"
+                className="px-2.5 py-1 text-xs rounded bg-[var(--surface-sunken)] hover:bg-[var(--border)] transition-colors"
+                onClick={() => setOverlayModalOpen(false)}
+              >
+                ✕ Close
+              </button>
+            </div>
+            <div className="flex-1 overflow-auto p-4 flex items-center justify-center bg-black/50">
+              <img
+                src={result.evidence_overlay.data_uri}
+                alt="Full Evidence Overlay"
+                className="max-h-[65vh] w-auto object-contain rounded border border-white/10 shadow-lg"
+              />
+            </div>
+            <div className="px-4 py-3 border-t border-[var(--border)] bg-[var(--surface-sunken)] flex flex-wrap items-center justify-between gap-2 text-xs">
+              <div className="flex items-center gap-1.5 flex-wrap">
+                <span className="font-medium text-[var(--text-secondary)]">Active layers:</span>
+                {result.evidence_overlay.supported_layers.map((l) => (
+                  <span key={l} className="px-1.5 py-0.5 rounded bg-[var(--surface)] border border-[var(--border)] text-[var(--accent)] font-mono text-[11px]">
+                    {l}
+                  </span>
+                ))}
+              </div>
+              <span className="text-[11px] text-[var(--text-muted)]">
+                Derived directly from raster pixel values
+              </span>
+            </div>
+          </div>
+        </div>
       ) : null}
     </aside>
   );

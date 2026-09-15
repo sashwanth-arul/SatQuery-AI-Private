@@ -4,7 +4,7 @@ from datetime import date, datetime
 from enum import Enum
 from typing import Any, Literal
 
-from pydantic import BaseModel, Field, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from app.schemas.vqa import SingleImageCaptionResult, SingleImageVQAResult
 from app.schemas.bi_temporal_change import BiTemporalChangeResult
@@ -214,6 +214,21 @@ class TraceStep(BaseModel):
     metadata: dict[str, object] | None = None
 
 
+class EvidenceOverlay(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    overlay_id: str
+    image_id: str
+    supported_layers: list[str] = Field(default_factory=list)
+    preview_url: str | None = None
+    data_uri: str | None = None
+    width: int = Field(ge=1)
+    height: int = Field(ge=1)
+    crs: str | None = None
+    bounds: list[float] | None = None
+    statistics: dict[str, Any] = Field(default_factory=dict)
+
+
 class AnalysisResult(BaseModel):
     status: AnalysisStatus
     session_id: str
@@ -236,6 +251,8 @@ class AnalysisResult(BaseModel):
     building_detection: "BuildingDetectionResult | None" = None
     building_temporal_change: "BuildingTemporalMatchResult | None" = None
     surface_area_change: "SurfaceAreaChangeResult | None" = None
+    evidence_overlay: EvidenceOverlay | None = None
+    domain: str | None = None
 
 
 class ChangeDetectionInput(BaseModel):

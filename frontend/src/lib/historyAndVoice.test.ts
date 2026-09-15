@@ -3,10 +3,12 @@ import { api } from "@/lib/api";
 import type { AnalysisHistoryItem, AnalysisHistoryResponse } from "@/types/domain";
 
 describe("Navigation Structure", () => {
-  it("includes /history and /reports routes", () => {
-    const expectedRoutes = ["/", "/workstation", "/history", "/reports", "/tutorial", "/credits"];
+  it("includes /history, /reports, and /geovision routes and excludes /credits", () => {
+    const expectedRoutes = ["/", "/workstation", "/history", "/reports", "/tutorial", "/geovision"];
     expect(expectedRoutes).toContain("/history");
     expect(expectedRoutes).toContain("/reports");
+    expect(expectedRoutes).toContain("/geovision");
+    expect(expectedRoutes).not.toContain("/credits");
   });
 });
 

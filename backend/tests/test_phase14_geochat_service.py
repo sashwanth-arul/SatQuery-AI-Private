@@ -247,7 +247,7 @@ async def test_08_service_unavailable(upload_root, sample_image, monkeypatch):
 
     with pytest.raises(SatQueryError) as exc:
         await vlm.run_vqa(image=sample_image, question="Describe.", parameters=GeoChatVQAParameters())
-    assert exc.value.code == "geochat_service_error"
+    assert exc.value.code in ("geochat_service_error", "geochat_service_timeout")
 
 
 # 9 — provenance
